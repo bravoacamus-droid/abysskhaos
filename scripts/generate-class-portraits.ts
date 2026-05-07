@@ -4,9 +4,11 @@
  * into `classes.portrait_url`.
  *
  * Idempotent: re-running with the same prompts yields the same hashes
- * and short-circuits the upload. Cost: 5 × ~$0.012 = ~$0.06 USD.
+ * and short-circuits the upload. Cost: ~$0.012 per generation.
  *
- * Usage:  pnpm tsx scripts/generate-class-portraits.ts
+ * Usage:
+ *   pnpm tsx scripts/generate-class-portraits.ts                # all 5
+ *   pnpm tsx scripts/generate-class-portraits.ts mage swordsman # only those
  */
 
 import { config as loadEnv } from "dotenv";
@@ -56,9 +58,9 @@ const CLASS_PROMPTS: ClassPrompt[] = [
     classId: "swordsman",
     name: "Swordsman",
     description:
-      "lean human swordsman, focused calm expression, light steel cuirass over dark blue tunic, " +
-      "leather pauldrons, holding an elegant longsword vertically in front of him, sharp jawline, " +
-      "neat short hair, pale blue eyes",
+      "young disciplined human samurai, stoic focused expression, traditional dark indigo and crimson kimono, " +
+      "simple obi belt, hand resting on the hilt of a sheathed katana at the hip, jet black hair tied in a topknot, " +
+      "sharp pale eyes, weathered hands, sense of meditative discipline and restraint",
   },
   {
     classId: "assassin",
@@ -80,9 +82,10 @@ const CLASS_PROMPTS: ClassPrompt[] = [
     classId: "mage",
     name: "Mage",
     description:
-      "ethereal human mage, long flowing robes in deep purple and gold trim, glowing arcane runes on hood, " +
-      "holding a staff topped with a violet crystal, serene mystical expression, " +
-      "long silver hair, glowing violet eyes",
+      "hooded human archmage, only head and upper chest visible, mysterious face partially shadowed under a deep purple hood, " +
+      "glowing violet arcane runes embroidered on the hood and collar, glowing pale violet eyes piercing through the shadow, " +
+      "tendrils of ethereal magical energy curling around the head, golden trim on the high collar, " +
+      "mystical aura, no staff, no robes shown below the chest",
   },
 ];
 
@@ -90,7 +93,23 @@ async function main() {
   const t0 = Date.now();
   let totalCost = 0;
 
-  for (const c of CLASS_PROMPTS) {
+  // Optional CLI filter: arg list of class IDs to (re)generate.
+  // No args = all 5. Unknown IDs error early.
+  const requested = process.argv.slice(2);
+  let toGenerate = CLASS_PROMPTS;
+  if (requested.length > 0) {
+    const known = new Set(CLASS_PROMPTS.map((c) => c.classId));
+    const unknown = requested.filter((id) => !known.has(id));
+    if (unknown.length > 0) {
+      console.error(`Unknown class id(s): ${unknown.join(", ")}`);
+      console.error(`Known: ${[...known].join(", ")}`);
+      process.exit(2);
+    }
+    toGenerate = CLASS_PROMPTS.filter((c) => requested.includes(c.classId));
+    console.log(`Filtering to ${toGenerate.length} class(es): ${requested.join(", ")}\n`);
+  }
+
+  for (const c of toGenerate) {
     const prompt = buildPrompt({
       subject: c.description,
       mood: CLASS_MOOD,
@@ -141,7 +160,7 @@ async function main() {
 
   const totalElapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(
-    `\nDone. 5 portraits in ${totalElapsed}s. Total PixelLab cost: $${totalCost.toFixed(4)}.`,
+    `\nDone. ${toGenerate.length} portrait(s) in ${totalElapsed}s. Total PixelLab cost: $${totalCost.toFixed(4)}.`,
   );
 }
 
