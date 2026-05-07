@@ -30,6 +30,21 @@ export type VerifiedInitData = {
   raw: Record<string, string>;
 };
 
+export type InitDataDebug = {
+  /** Keys present in the parsed initData (no values, for privacy). */
+  keysPresent: string[];
+  /** Length of each value, indexed by key. Detects truncation / encoding issues. */
+  valueLengths: Record<string, number>;
+  /** Length of the bot token used (catches whitespace / typo bugs in env vars). */
+  botTokenLength: number;
+  /** First 16 chars of computed hex HMAC (truncated, safe to expose). */
+  computedHashPrefix?: string;
+  /** First 16 chars of provided hex HMAC (truncated, safe to expose). */
+  providedHashPrefix?: string;
+  /** Length of the data-check-string fed into the HMAC. */
+  dataCheckLength?: number;
+};
+
 export class InitDataError extends Error {
   constructor(
     message: string,
@@ -39,6 +54,7 @@ export class InitDataError extends Error {
       | "EXPIRED"
       | "MISSING_USER"
       | "MALFORMED",
+    public readonly debug?: InitDataDebug,
   ) {
     super(message);
     this.name = "InitDataError";
@@ -86,21 +102,41 @@ export async function verifyInitData(
   botToken: string,
   maxAgeSeconds: number,
 ): Promise<VerifiedInitData> {
+  // Trim surrounding whitespace from the bot token: a stray newline in a
+  // Vercel env var would silently break HMAC verification.
+  const tokenClean = botToken.trim();
+
   let params: URLSearchParams;
   try {
     params = new URLSearchParams(initData);
   } catch {
-    throw new InitDataError("initData is not a valid query string", "MALFORMED");
+    throw new InitDataError("initData is not a valid query string", "MALFORMED", {
+      keysPresent: [],
+      valueLengths: {},
+      botTokenLength: tokenClean.length,
+    });
   }
+
+  const allKeys: string[] = [];
+  const valueLengths: Record<string, number> = {};
+  for (const [k, v] of params.entries()) {
+    allKeys.push(k);
+    valueLengths[k] = v.length;
+  }
+  const debugBase: InitDataDebug = {
+    keysPresent: allKeys,
+    valueLengths,
+    botTokenLength: tokenClean.length,
+  };
 
   const providedHash = params.get("hash");
   if (!providedHash) {
-    throw new InitDataError("initData is missing `hash`", "MISSING_HASH");
+    throw new InitDataError("initData is missing `hash`", "MISSING_HASH", debugBase);
   }
 
   // Per spec, only `hash` is excluded from the data-check-string. The newer
   // `signature` field (Ed25519 third-party validation) IS part of the string
-  // for the bot-token HMAC pathway. Excluding it is a correctness bug.
+  // for the bot-token HMAC pathway.
   // https://core.telegram.org/bots/webapps#validating-data-for-mini-apps
   const raw: Record<string, string> = {};
   const dataLines: string[] = [];
@@ -115,12 +151,17 @@ export async function verifyInitData(
   const dataCheckString = dataLines.join("\n");
 
   // Telegram WebApp variant: secret = HMAC("WebAppData", bot_token).
-  const secret = await hmacSha256(encoder.encode("WebAppData"), botToken);
+  const secret = await hmacSha256(encoder.encode("WebAppData"), tokenClean);
   const computed = await hmacSha256(secret, dataCheckString);
   const computedHex = bufferToHex(computed);
 
   if (!timingSafeEqualHex(computedHex, providedHash)) {
-    throw new InitDataError("HMAC mismatch", "BAD_HMAC");
+    throw new InitDataError("HMAC mismatch", "BAD_HMAC", {
+      ...debugBase,
+      computedHashPrefix: computedHex.slice(0, 16),
+      providedHashPrefix: providedHash.slice(0, 16),
+      dataCheckLength: dataCheckString.length,
+    });
   }
 
   const authDateStr = raw["auth_date"];

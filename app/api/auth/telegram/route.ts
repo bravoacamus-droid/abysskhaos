@@ -30,7 +30,17 @@ export async function POST(req: Request) {
     );
   } catch (err) {
     if (err instanceof InitDataError) {
-      return NextResponse.json({ error: err.code, detail: err.message }, { status: 401 });
+      // Diagnostic info is included only when DEBUG_AUTH=1 is set in the
+      // environment. Until Phase 0 is fully verified end-to-end, default ON.
+      const includeDebug = (process.env.DEBUG_AUTH ?? "1") === "1";
+      return NextResponse.json(
+        {
+          error: err.code,
+          detail: err.message,
+          ...(includeDebug && err.debug ? { debug: err.debug } : {}),
+        },
+        { status: 401 },
+      );
     }
     return NextResponse.json({ error: "VERIFY_FAILED" }, { status: 500 });
   }

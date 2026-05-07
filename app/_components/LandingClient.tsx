@@ -46,8 +46,14 @@ export default function LandingClient() {
         });
 
         if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: "unknown" }));
-          throw new Error(body.error ?? `HTTP ${res.status}`);
+          const body = (await res.json().catch(() => ({ error: "unknown" }))) as {
+            error?: string;
+            detail?: string;
+            debug?: unknown;
+          };
+          const msg = body.detail ?? body.error ?? `HTTP ${res.status}`;
+          const dbg = body.debug ? `\n\n[DEBUG] ${JSON.stringify(body.debug, null, 2)}` : "";
+          throw new Error(msg + dbg);
         }
 
         const body = (await res.json()) as {
@@ -83,7 +89,9 @@ export default function LandingClient() {
     return (
       <div className="rounded-lg border border-abyss-ember/40 bg-abyss-deep p-6">
         <p className="text-xs uppercase tracking-widest text-abyss-ember">El abismo te rechaza</p>
-        <p className="mt-3 text-sm text-abyss-fog">{state.message}</p>
+        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-left font-mono text-[10px] leading-relaxed text-abyss-fog">
+          {state.message}
+        </pre>
       </div>
     );
   }
