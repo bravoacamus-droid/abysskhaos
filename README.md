@@ -12,6 +12,7 @@ Telegram Mini App RPG sobre TON. Desciende del piso 100 al piso 1.
 ## Documentos clave
 
 - [`docs/PLAN.md`](docs/PLAN.md) — plan por fases del desarrollo.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — principios vinculantes de arquitectura, seguridad, escalabilidad y costo.
 - [`docs/CANON.md`](docs/CANON.md) — decisiones canónicas que resuelven inconsistencias entre los 13 docs maestros.
 
 ## Estado actual
