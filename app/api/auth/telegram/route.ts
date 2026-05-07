@@ -30,9 +30,10 @@ export async function POST(req: Request) {
     );
   } catch (err) {
     if (err instanceof InitDataError) {
-      // Diagnostic info is included only when DEBUG_AUTH=1 is set in the
-      // environment. Until Phase 0 is fully verified end-to-end, default ON.
-      const includeDebug = (process.env.DEBUG_AUTH ?? "1") === "1";
+      // Diagnostic info exposed only when DEBUG_AUTH=1 is set. Default OFF
+      // in production now that Phase 0 is verified end-to-end. To debug a
+      // failing client, set DEBUG_AUTH=1 in Vercel and reproduce.
+      const includeDebug = process.env.DEBUG_AUTH === "1";
       return NextResponse.json(
         {
           error: err.code,

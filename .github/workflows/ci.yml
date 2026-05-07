@@ -27,6 +27,8 @@ jobs:
 
       - run: pnpm lint
 
+      - run: pnpm test
+
       - name: Build
         env:
           # CI build doesn't need real values; lib/env.ts only throws on use.
