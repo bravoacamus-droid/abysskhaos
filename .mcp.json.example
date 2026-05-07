@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to .mcp.json (gitignored) and replace the placeholder. See docs/ASSET_PIPELINE.md.",
+  "mcpServers": {
+    "pixellab": {
+      "type": "http",
+      "url": "https://api.pixellab.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer <PIXELLAB_API_KEY>"
+      }
+    }
+  }
+}

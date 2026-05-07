@@ -40,6 +40,9 @@ coverage/
 # Vercel
 .vercel
 
+# MCP server config (contains real bearer tokens; .mcp.json.example is the template)
+.mcp.json
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
