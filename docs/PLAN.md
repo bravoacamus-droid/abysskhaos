@@ -31,17 +31,20 @@
 - Endpoint admin read-only `/api/v1/admin/data/[resource]` con API key, whitelist de 32 recursos
 - 23/23 tests verde (HMAC roundtrip + i18n key parity + seed structure)
 
-### Fase 2 — Creación de personaje
+### Fase 2 — Creación de personaje + onboarding del pipeline de arte
 - Wizard 7 pasos (Doc 5)
 - Multi-personaje (2 gratis, slots 3 y 4 con USDT pendiente)
 - HUB con 5 tabs: Personaje, Inventario, Bestiario, Tienda, Mapa
-- **Entregable**: crear personaje y verlo en HUB.
+- **PixelLab MCP integrado**: primer uso real del pipeline (5 retratos de clase + ~10 íconos UI). Detalles en [`docs/ASSET_PIPELINE.md`](ASSET_PIPELINE.md).
+- Tabla `asset_generations` (audit trail de cada llamada a PixelLab: prompt, hash, costo)
+- Cloudflare R2 configurado con bucket `assets/` + content-hash filenames
+- **Entregable**: crear personaje, ver retrato real generado por PixelLab, navegar el HUB.
 
-### Fase 3 — Mundo y exploración
+### Fase 3 — Mundo y exploración (pipeline maduro)
 - Generación procedural piso 100 (5 rooms iniciales para tutorial)
 - Phaser scene `/play` con tilemap + movimiento entre rooms
 - NPC: Cedric (tutorial + arma inicial)
-- Asset pipeline R2 (PixelLab API integrada)
+- **PixelLab pipeline maduro**: Wang tileset Threshold + 5 rooms + Cedric sprite + props (~40 imágenes)
 - **Entregable**: explorar piso 100 y hablar con Cedric.
 
 ### Fase 4 — Combate base server-authoritative
