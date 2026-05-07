@@ -114,7 +114,7 @@ export default function LandingClient() {
       </div>
 
       {state.status === "idle" || state.status === "loading" ? (
-        <div className="rounded-lg border border-abyss-fog/40 bg-abyss-deep p-6 text-abyss-fog">
+        <div className="rounded-lg border border-abyss-coal/80 bg-abyss-deep p-6 text-abyss-mist">
           <p className="text-sm uppercase tracking-widest">{t(locale, "landing.loading")}</p>
         </div>
       ) : null}
@@ -124,7 +124,7 @@ export default function LandingClient() {
           <p className="text-xs uppercase tracking-widest text-abyss-ember">
             {t(locale, "landing.rejected_title")}
           </p>
-          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-left font-mono text-[10px] leading-relaxed text-abyss-fog">
+          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-left font-mono text-[10px] leading-relaxed text-abyss-mist">
             {state.message}
           </pre>
         </div>
@@ -137,13 +137,15 @@ export default function LandingClient() {
               ? t(locale, "landing.new_soul_bound")
               : t(locale, "landing.soul_recognized")}
           </p>
-          <h2 className="mt-3 text-2xl font-bold">
+          <h2 className="mt-3 text-2xl font-bold text-white">
             {t(locale, "landing.welcome_named", { name: state.user.firstName })}
           </h2>
           {state.user.username ? (
             <p className="mt-1 text-sm text-abyss-fog">@{state.user.username}</p>
           ) : null}
-          <p className="mt-6 text-xs text-abyss-fog/80">{t(locale, "landing.next_phase")}</p>
+          <p className="mt-6 text-sm leading-relaxed text-abyss-mist">
+            {t(locale, "landing.next_phase")}
+          </p>
         </div>
       ) : null}
     </div>
