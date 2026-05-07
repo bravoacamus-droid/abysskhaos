@@ -11,9 +11,10 @@ type Props = {
   character: CharacterRow;
   klass: ClassRow | null;
   locale: Locale;
+  onDescend: () => void;
 };
 
-export default function Hub({ character, klass, locale }: Props) {
+export default function Hub({ character, klass, locale, onDescend }: Props) {
   const [tab, setTab] = useState<Tab>("character");
 
   return (
@@ -48,6 +49,14 @@ export default function Hub({ character, klass, locale }: Props) {
           </div>
         </div>
       </header>
+
+      <button
+        type="button"
+        onClick={onDescend}
+        className="w-full rounded-lg border border-abyss-khaos/60 bg-gradient-to-r from-abyss-khaos/30 via-abyss-khaos/40 to-abyss-ember/30 py-3 text-sm font-semibold uppercase tracking-widest text-white shadow-md shadow-abyss-khaos/20 transition hover:border-abyss-khaos hover:from-abyss-khaos/50 hover:via-abyss-khaos/60 hover:to-abyss-ember/50"
+      >
+        {t(locale, "hub.descend")}
+      </button>
 
       <nav className="grid grid-cols-5 gap-1 rounded-lg border border-abyss-coal/80 bg-abyss-deep p-1">
         {(["character", "inventory", "bestiary", "shop", "map"] as Tab[]).map((id) => (

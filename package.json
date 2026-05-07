@@ -12,6 +12,7 @@
     "test": "tsx --test tests/**/*.test.ts",
     "seed": "tsx scripts/seed.ts",
     "cleanup-r2": "tsx scripts/r2-cleanup-orphans.ts",
+    "generate-npcs": "tsx scripts/generate-npc-portraits.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

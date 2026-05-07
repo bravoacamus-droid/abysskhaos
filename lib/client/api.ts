@@ -123,3 +123,86 @@ export function updatePreferredLocale(opts: FetchOpts & { locale: string }): Pro
     signal: opts.signal,
   });
 }
+
+export type RoomNpc = {
+  id: string;
+  name: string;
+  title: string | null;
+  portrait_url: string | null;
+  has_unmet_first_dialogue: boolean;
+  name_localized: string;
+  title_localized: string | null;
+};
+
+export type RoomConnectionRow = {
+  direction: "north" | "south" | "east" | "west";
+  to_room_id: string;
+  is_locked: boolean;
+  unlock_requirement: string | null;
+};
+
+export type RoomState = {
+  room: {
+    id: string;
+    floor_number: number;
+    room_index: number;
+    room_type: string;
+    is_safe: boolean;
+    biome_id: string | null;
+    name: string;
+    name_localized: string;
+    description: string | null;
+    description_localized: string | null;
+  };
+  connections: RoomConnectionRow[];
+  npcs: RoomNpc[];
+};
+
+export type DialogueLine = {
+  id: string;
+  sequence_index: number;
+  speaker: "npc" | "narrator" | "choice";
+  text: string;
+  text_localized: string;
+};
+
+export type DialoguePayload = {
+  dialogue_key: string;
+  lines: DialogueLine[];
+};
+
+export function fetchRoom(opts: FetchOpts & { characterId: string; locale: string }): Promise<RoomState> {
+  return call(`/api/v1/characters/${opts.characterId}/room?locale=${encodeURIComponent(opts.locale)}`, "GET", {
+    initData: opts.initData,
+    signal: opts.signal,
+  });
+}
+
+export function moveCharacter(
+  opts: FetchOpts & { characterId: string; direction: "north" | "south" | "east" | "west" },
+): Promise<{ current_room_id: string; current_floor: number }> {
+  return call(`/api/v1/characters/${opts.characterId}/move`, "POST", {
+    initData: opts.initData,
+    body: { direction: opts.direction },
+    signal: opts.signal,
+  });
+}
+
+export function fetchDialogue(
+  opts: FetchOpts & { characterId: string; npcId: string; locale: string },
+): Promise<DialoguePayload> {
+  return call(
+    `/api/v1/characters/${opts.characterId}/dialogue/${opts.npcId}?locale=${encodeURIComponent(opts.locale)}`,
+    "GET",
+    { initData: opts.initData, signal: opts.signal },
+  );
+}
+
+export function markDialogueRead(
+  opts: FetchOpts & { characterId: string; npcId: string },
+): Promise<{ ok: boolean }> {
+  return call(`/api/v1/characters/${opts.characterId}/dialogue/${opts.npcId}`, "POST", {
+    initData: opts.initData,
+    signal: opts.signal,
+  });
+}

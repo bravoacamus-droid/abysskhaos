@@ -34,6 +34,7 @@
   },
   "hub": {
     "level": "Lv {level}",
+    "descend": "Descend",
     "tabs": {
       "character": "Character",
       "inventory": "Inventory",
@@ -44,7 +45,7 @@
     "placeholder_inventory": "Inventory unlocks in Phase 5.",
     "placeholder_bestiary": "Bestiary unlocks in Phase 8.",
     "placeholder_shop": "Shop unlocks in Phase 9.",
-    "placeholder_map": "Map unlocks in Phase 3.",
+    "placeholder_map": "A static map of explored rooms unlocks in Phase 3b.",
     "stats": {
       "hp": "HP",
       "mp": "MP",
@@ -58,6 +59,36 @@
     "current_floor": "Floor {floor}",
     "no_floor": "Awaiting descent"
   },
+  "exploration": {
+    "back_to_hub": "Back",
+    "loading": "Approaching…",
+    "error_title": "Path obstructed",
+    "npcs_here": "Souls here",
+    "npc_unmet": "New encounter",
+    "move_label": "Move",
+    "floor_label": "Floor {floor}",
+    "room_type": {
+      "hub": "Hub",
+      "tutorial": "Threshold",
+      "mob": "Hostile",
+      "sleeping": "Sleeping",
+      "empty": "Empty",
+      "item": "Item",
+      "npc": "NPC",
+      "boss": "Boss",
+      "exit": "Exit"
+    },
+    "direction": {
+      "north": "North",
+      "south": "South",
+      "east": "East",
+      "west": "West"
+    },
+    "dialogue_loading": "Reading the silence…",
+    "dialogue_empty": "There is nothing left to say.",
+    "dialogue_next": "Continue",
+    "dialogue_close": "End"
+  },
   "errors": {
     "generic": "Something went wrong",
     "INVALID_NAME": "Invalid character name.",
@@ -65,7 +96,14 @@
     "SLOT_OCCUPIED": "That slot is already taken.",
     "SLOT_LIMIT_EXCEEDED": "You've reached the character slot limit.",
     "NO_FREE_SLOTS": "No free character slots.",
-    "SLOT_NOT_UNLOCKED": "That slot requires payment to unlock."
+    "SLOT_NOT_UNLOCKED": "That slot requires payment to unlock.",
+    "NO_EXIT": "There is no path that way.",
+    "LOCKED": "That passage is sealed.",
+    "NO_DIALOGUE": "They have nothing to say.",
+    "NPC_NOT_IN_ROOM": "They are not here.",
+    "NO_CURRENT_ROOM": "You are nowhere.",
+    "INVALID_DIRECTION": "Unknown direction.",
+    "TUTORIAL_NOT_SEEDED": "The Threshold has not been forged yet."
   },
   "language_switcher": {
     "label": "Language",

@@ -13,6 +13,7 @@ import {
 import { CANONICAL_LOCALE, isSupportedLocale, pickLocale, t, type Locale } from "@/lib/i18n";
 
 import CharacterCreate from "./CharacterCreate";
+import Exploration from "./Exploration";
 import Hub from "./Hub";
 import LanguageSwitcher from "./LanguageSwitcher";
 import SlotPicker from "./SlotPicker";
@@ -23,7 +24,13 @@ type State =
   | { status: "boot" }
   | { status: "rejected"; message: string }
   | { status: "wizard"; classes: ClassRow[]; characters: CharacterRow[]; activeId: string | null }
-  | { status: "hub"; classes: ClassRow[]; characters: CharacterRow[]; activeId: string };
+  | {
+      status: "hub";
+      classes: ClassRow[];
+      characters: CharacterRow[];
+      activeId: string;
+      mode: "character" | "exploration";
+    };
 
 export default function GameShell() {
   const [initData, setInitData] = useState<string | null>(null);
@@ -95,6 +102,7 @@ export default function GameShell() {
             classes,
             characters,
             activeId: characters[0]!.id,
+            mode: "character",
           });
         }
       } catch (err) {
@@ -131,7 +139,7 @@ export default function GameShell() {
 
   function handleSelectCharacter(id: string) {
     if (state.status !== "hub") return;
-    setState({ ...state, activeId: id });
+    setState({ ...state, activeId: id, mode: "character" });
   }
 
   function handleCreated(character: CharacterRow) {
@@ -142,7 +150,18 @@ export default function GameShell() {
       classes: state.classes,
       characters,
       activeId: character.id,
+      mode: "character",
     });
+  }
+
+  function handleDescend() {
+    if (state.status !== "hub") return;
+    setState({ ...state, mode: "exploration" });
+  }
+
+  function handleExitExploration() {
+    if (state.status !== "hub") return;
+    setState({ ...state, mode: "character" });
   }
 
   const klassMap = useMemo(() => {
@@ -171,8 +190,16 @@ export default function GameShell() {
       ) : null}
 
       {state.status === "hub" && activeCharacter ? (
-        <>
-          {state.characters.length > 0 || true ? (
+        state.mode === "exploration" ? (
+          <Exploration
+            initData={initData!}
+            characterId={activeCharacter.id}
+            characterName={activeCharacter.name}
+            locale={locale}
+            onExit={handleExitExploration}
+          />
+        ) : (
+          <>
             <SlotPicker
               characters={state.characters}
               activeId={state.activeId}
@@ -181,13 +208,14 @@ export default function GameShell() {
               onSelect={handleSelectCharacter}
               onForge={handleForgeAnother}
             />
-          ) : null}
-          <Hub
-            character={activeCharacter}
-            klass={klassMap.get(activeCharacter.class_id) ?? null}
-            locale={locale}
-          />
-        </>
+            <Hub
+              character={activeCharacter}
+              klass={klassMap.get(activeCharacter.class_id) ?? null}
+              locale={locale}
+              onDescend={handleDescend}
+            />
+          </>
+        )
       ) : null}
 
       {state.status === "wizard" && initData ? (
@@ -203,6 +231,7 @@ export default function GameShell() {
                     classes: state.classes,
                     characters: state.characters,
                     activeId: state.activeId!,
+                    mode: "character",
                   })
               : undefined
           }

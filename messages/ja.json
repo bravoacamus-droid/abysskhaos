@@ -56,7 +56,8 @@
       "spirit": "SPI"
     },
     "current_floor": "Floor {floor}",
-    "no_floor": "Awaiting descent"
+    "no_floor": "Awaiting descent",
+    "descend": "Descend"
   },
   "errors": {
     "generic": "Something went wrong",
@@ -65,7 +66,14 @@
     "SLOT_OCCUPIED": "That slot is already taken.",
     "SLOT_LIMIT_EXCEEDED": "You've reached the character slot limit.",
     "NO_FREE_SLOTS": "No free character slots.",
-    "SLOT_NOT_UNLOCKED": "That slot requires payment to unlock."
+    "SLOT_NOT_UNLOCKED": "That slot requires payment to unlock.",
+    "NO_EXIT": "There is no path that way.",
+    "LOCKED": "That passage is sealed.",
+    "NO_DIALOGUE": "They have nothing to say.",
+    "NPC_NOT_IN_ROOM": "They are not here.",
+    "NO_CURRENT_ROOM": "You are nowhere.",
+    "INVALID_DIRECTION": "Unknown direction.",
+    "TUTORIAL_NOT_SEEDED": "The Threshold has not been forged yet."
   },
   "language_switcher": {
     "label": "言語",
@@ -75,5 +83,35 @@
     "forge": "Forge",
     "locked_paid": "Unlocks with USDT in Phase 12",
     "locked_short": "Locked"
+  },
+  "exploration": {
+    "back_to_hub": "Back",
+    "loading": "Approaching…",
+    "error_title": "Path obstructed",
+    "npcs_here": "Souls here",
+    "npc_unmet": "New encounter",
+    "move_label": "Move",
+    "floor_label": "Floor {floor}",
+    "room_type": {
+      "hub": "Hub",
+      "tutorial": "Threshold",
+      "mob": "Hostile",
+      "sleeping": "Sleeping",
+      "empty": "Empty",
+      "item": "Item",
+      "npc": "NPC",
+      "boss": "Boss",
+      "exit": "Exit"
+    },
+    "direction": {
+      "north": "North",
+      "south": "South",
+      "east": "East",
+      "west": "West"
+    },
+    "dialogue_loading": "Reading the silence…",
+    "dialogue_empty": "There is nothing left to say.",
+    "dialogue_next": "Continue",
+    "dialogue_close": "End"
   }
 }

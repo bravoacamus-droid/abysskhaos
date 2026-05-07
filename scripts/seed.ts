@@ -19,6 +19,7 @@ import { seedWorld } from "../data/seeds/world";
 import { seedNpcs } from "../data/seeds/npcs";
 import { seedBestiary } from "../data/seeds/bestiary";
 import { seedItems } from "../data/seeds/items";
+import { seedPhase3Tutorial } from "../data/seeds/phase3_tutorial";
 import type { SeedReport } from "../data/seeds/_types";
 
 loadEnv({ path: ".env.local" });
@@ -46,6 +47,7 @@ const stages: Stage[] = [
   { name: "npcs",       run: () => seedNpcs(client) },
   { name: "bestiary",   run: () => seedBestiary(client) },
   { name: "items",      run: () => seedItems(client) },
+  { name: "phase3_tutorial", run: () => seedPhase3Tutorial(client) },
 ];
 
 async function main() {

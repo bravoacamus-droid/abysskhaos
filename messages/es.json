@@ -34,6 +34,7 @@
   },
   "hub": {
     "level": "Nv {level}",
+    "descend": "Descender",
     "tabs": {
       "character": "Personaje",
       "inventory": "Inventario",
@@ -44,7 +45,7 @@
     "placeholder_inventory": "El inventario se desbloquea en la Fase 5.",
     "placeholder_bestiary": "El bestiario se desbloquea en la Fase 8.",
     "placeholder_shop": "La tienda se desbloquea en la Fase 9.",
-    "placeholder_map": "El mapa se desbloquea en la Fase 3.",
+    "placeholder_map": "Un mapa estático de los cuartos explorados llega en la Fase 3b.",
     "stats": {
       "hp": "HP",
       "mp": "MP",
@@ -58,6 +59,36 @@
     "current_floor": "Piso {floor}",
     "no_floor": "Esperando el descenso"
   },
+  "exploration": {
+    "back_to_hub": "Atrás",
+    "loading": "Acercándose…",
+    "error_title": "Camino obstruido",
+    "npcs_here": "Almas aquí",
+    "npc_unmet": "Nuevo encuentro",
+    "move_label": "Moverse",
+    "floor_label": "Piso {floor}",
+    "room_type": {
+      "hub": "Refugio",
+      "tutorial": "Umbral",
+      "mob": "Hostil",
+      "sleeping": "Dormido",
+      "empty": "Vacío",
+      "item": "Objeto",
+      "npc": "NPC",
+      "boss": "Jefe",
+      "exit": "Salida"
+    },
+    "direction": {
+      "north": "Norte",
+      "south": "Sur",
+      "east": "Este",
+      "west": "Oeste"
+    },
+    "dialogue_loading": "Leyendo el silencio…",
+    "dialogue_empty": "No queda nada por decir.",
+    "dialogue_next": "Continuar",
+    "dialogue_close": "Terminar"
+  },
   "errors": {
     "generic": "Algo salió mal",
     "INVALID_NAME": "Nombre de personaje inválido.",
@@ -65,7 +96,14 @@
     "SLOT_OCCUPIED": "Ese slot ya está ocupado.",
     "SLOT_LIMIT_EXCEEDED": "Has alcanzado el límite de slots de personaje.",
     "NO_FREE_SLOTS": "No hay slots libres.",
-    "SLOT_NOT_UNLOCKED": "Ese slot requiere pago para desbloquearse."
+    "SLOT_NOT_UNLOCKED": "Ese slot requiere pago para desbloquearse.",
+    "NO_EXIT": "No hay paso por ahí.",
+    "LOCKED": "Ese paso está sellado.",
+    "NO_DIALOGUE": "No tiene nada que decir.",
+    "NPC_NOT_IN_ROOM": "No está aquí.",
+    "NO_CURRENT_ROOM": "Estás en ninguna parte.",
+    "INVALID_DIRECTION": "Dirección desconocida.",
+    "TUTORIAL_NOT_SEEDED": "El Umbral aún no ha sido forjado."
   },
   "language_switcher": {
     "label": "Idioma",
