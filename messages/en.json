@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "en",
+    "name_native": "English",
+    "is_canonical": true
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "Sealing soul…",
+    "rejected_title": "The abyss rejects you",
+    "must_open_in_telegram": "This mini-app must be opened from Telegram. Tap the menu button of @AbyssKhaosBot.",
+    "new_soul_bound": "New soul bound",
+    "soul_recognized": "Soul recognized",
+    "welcome_named": "Welcome, {name}",
+    "next_phase": "The descent begins soon. Next phase: character creation."
+  },
+  "language_switcher": {
+    "label": "Language",
+    "save": "Save"
+  }
+}

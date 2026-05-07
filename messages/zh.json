@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "zh",
+    "name_native": "中文",
+    "is_canonical": false
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "正在封印灵魂…",
+    "rejected_title": "深渊拒绝了你",
+    "must_open_in_telegram": "此迷你应用必须从 Telegram 打开。请点击 @AbyssKhaosBot 的菜单按钮。",
+    "new_soul_bound": "新灵魂已绑定",
+    "soul_recognized": "灵魂已识别",
+    "welcome_named": "欢迎，{name}",
+    "next_phase": "下降即将开始。下一阶段：角色创建。"
+  },
+  "language_switcher": {
+    "label": "语言",
+    "save": "保存"
+  }
+}

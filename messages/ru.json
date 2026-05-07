@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "ru",
+    "name_native": "Русский",
+    "is_canonical": false
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "Запечатываю душу…",
+    "rejected_title": "Бездна отвергает тебя",
+    "must_open_in_telegram": "Это мини-приложение должно открываться из Telegram. Нажмите кнопку меню @AbyssKhaosBot.",
+    "new_soul_bound": "Новая душа связана",
+    "soul_recognized": "Душа узнана",
+    "welcome_named": "Добро пожаловать, {name}",
+    "next_phase": "Спуск начнётся скоро. Следующая фаза: создание персонажа."
+  },
+  "language_switcher": {
+    "label": "Язык",
+    "save": "Сохранить"
+  }
+}

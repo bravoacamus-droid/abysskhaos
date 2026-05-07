@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "pt",
+    "name_native": "Português",
+    "is_canonical": false
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "Selando alma…",
+    "rejected_title": "O abismo te rejeita",
+    "must_open_in_telegram": "Este mini-app deve ser aberto pelo Telegram. Toque no botão de menu de @AbyssKhaosBot.",
+    "new_soul_bound": "Nova alma vinculada",
+    "soul_recognized": "Alma reconhecida",
+    "welcome_named": "Bem-vindo, {name}",
+    "next_phase": "A descida começa em breve. Próxima fase: criação de personagem."
+  },
+  "language_switcher": {
+    "label": "Idioma",
+    "save": "Salvar"
+  }
+}

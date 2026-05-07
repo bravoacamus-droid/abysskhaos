@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "tl",
+    "name_native": "Tagalog",
+    "is_canonical": false
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "Sinasara ang kaluluwa…",
+    "rejected_title": "Tinatanggihan ka ng kalaliman",
+    "must_open_in_telegram": "Dapat buksan ang mini-app na ito mula sa Telegram. I-tap ang menu button ng @AbyssKhaosBot.",
+    "new_soul_bound": "Bagong kaluluwa na nakatali",
+    "soul_recognized": "Kilalang kaluluwa",
+    "welcome_named": "Maligayang pagdating, {name}",
+    "next_phase": "Magsisimula na ang pagbaba. Susunod na yugto: paggawa ng karakter."
+  },
+  "language_switcher": {
+    "label": "Wika",
+    "save": "I-save"
+  }
+}

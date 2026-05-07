@@ -10,6 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
+    "seed": "tsx scripts/seed.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "eslint-config-next": "14.2.18",
     "postcss": "^8.4.49",
     "prettier": "^3.3.3",
+    "dotenv": "^16.4.5",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"

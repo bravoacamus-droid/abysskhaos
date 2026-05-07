@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "ja",
+    "name_native": "日本語",
+    "is_canonical": false
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "魂を封じています…",
+    "rejected_title": "深淵に拒まれた",
+    "must_open_in_telegram": "このミニアプリは Telegram から開いてください。@AbyssKhaosBot のメニューボタンを押してください。",
+    "new_soul_bound": "新しい魂が結ばれた",
+    "soul_recognized": "魂を認識した",
+    "welcome_named": "ようこそ、{name}",
+    "next_phase": "降下はまもなく始まります。次のフェーズ：キャラクター作成。"
+  },
+  "language_switcher": {
+    "label": "言語",
+    "save": "保存"
+  }
+}

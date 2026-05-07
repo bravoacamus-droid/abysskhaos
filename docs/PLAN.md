@@ -23,11 +23,13 @@
 - GitHub Actions CI + README mínimo
 - **Entregable demoable**: bot `/start` abre mini-app y autentica.
 
-### Fase 1 — Datos canónicos
-- Migrations completas: `classes`, `paths`, `sub_branches`, `attributes`, `weapons`, `armor`, `accessories`, `sets`, `monsters`, `floors`, `rooms`, `items`, `titles`, `npcs`, `loot_tables`
-- Seed scripts cargando los 13 docs (49 sets, 255 títulos, 69 mobs, etc.)
-- Endpoint admin read-only `/api/admin/data` para inspeccionar
-- **Entregable**: DB poblada y consultable.
+### Fase 1 — Datos canónicos + i18n (✅ shipped)
+- 31 tablas canónicas (classes, paths, hybrid_classes, sub_branches, attributes, sub_attributes, items_master + sub-tables, sets, monsters/families/tiers, floors, biomes, cities, npcs, loot_tables, etc.) con RLS deny-all
+- i18n: `supported_locales` (10 idiomas), `translations` table (entity_type + entity_id + locale + field), `users.preferred_locale`. **Inglés canónico** (Web3 lingua franca); español traducido al 100% en `translations`; 8 idiomas más con UI traducida.
+- Seeds (309 filas + 444 traducciones): 8 elements · 17 status_effects · 7 rarity_tiers · 8 soul_forge_ranks · 4 damage_types · 6 currencies · 4 attributes + 20 sub_attributes · 5 classes + 15 paths + 10 hybrid_classes + 20 sub_branches · 10 biomes + 100 floors + 5 cities · 15 npcs · 16 monster_families + 6 monster_tiers + 8 sample monsters · 5 sample equipment_sets
+- App i18n: `messages/{locale}.json` × 10, helper `lib/i18n` con `t()` typed + placeholder substitution, `LanguageSwitcher` UI con 10 idiomas
+- Endpoint admin read-only `/api/v1/admin/data/[resource]` con API key, whitelist de 32 recursos
+- 23/23 tests verde (HMAC roundtrip + i18n key parity + seed structure)
 
 ### Fase 2 — Creación de personaje
 - Wizard 7 pasos (Doc 5)

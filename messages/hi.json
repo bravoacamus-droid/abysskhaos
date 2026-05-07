@@ -1,0 +1,22 @@
+{
+  "$meta": {
+    "locale": "hi",
+    "name_native": "हिन्दी",
+    "is_canonical": false
+  },
+  "landing": {
+    "title": "ABYSS",
+    "subtitle": "Khaos Descent",
+    "loading": "आत्मा को सील कर रहे हैं…",
+    "rejected_title": "अंधकार आपको अस्वीकार करता है",
+    "must_open_in_telegram": "यह मिनी-ऐप Telegram से खोलना चाहिए। @AbyssKhaosBot का मेनू बटन दबाएँ।",
+    "new_soul_bound": "नई आत्मा बंधी",
+    "soul_recognized": "आत्मा पहचानी गई",
+    "welcome_named": "स्वागत है, {name}",
+    "next_phase": "अवतरण जल्दी शुरू होगा। अगला चरण: चरित्र निर्माण।"
+  },
+  "language_switcher": {
+    "label": "भाषा",
+    "save": "सहेजें"
+  }
+}
