@@ -31,14 +31,16 @@
 - Endpoint admin read-only `/api/v1/admin/data/[resource]` con API key, whitelist de 32 recursos
 - 23/23 tests verde (HMAC roundtrip + i18n key parity + seed structure)
 
-### Fase 2 — Creación de personaje + onboarding del pipeline de arte
-- Wizard 7 pasos (Doc 5)
-- Multi-personaje (2 gratis, slots 3 y 4 con USDT pendiente)
-- HUB con 5 tabs: Personaje, Inventario, Bestiario, Tienda, Mapa
-- **PixelLab MCP integrado**: primer uso real del pipeline (5 retratos de clase + ~10 íconos UI). Detalles en [`docs/ASSET_PIPELINE.md`](ASSET_PIPELINE.md).
-- Tabla `asset_generations` (audit trail de cada llamada a PixelLab: prompt, hash, costo)
-- Cloudflare R2 configurado con bucket `assets/` + content-hash filenames
-- **Entregable**: crear personaje, ver retrato real generado por PixelLab, navegar el HUB.
+### Fase 2 — Creación de personaje + pipeline de arte (✅ shipped)
+- 5 retratos de clase generados con PixelLab pixflux 96×96, subidos a R2 con content-hash filename + immutable cache
+- Wizard 3 pasos (clase → nombre → confirmar) — la versión 7 pasos de Doc 5 se desbloquea con stat-allocation en Fase 7 y selección de slot pago en Fase 12
+- HUB con 5 tabs (Personaje activo · Inventario/Bestiario/Tienda/Mapa con placeholders por fase)
+- Multi-personaje 2 slots gratis (slots 3 y 4 quedan reservados para Fase 12 USDT)
+- Schema: `characters` con stats Lv 1 denormalizados, `asset_generations` con audit trail completo
+- Endpoints: `GET /api/v1/classes`, `GET/POST /api/v1/characters`, `PATCH /api/v1/me/locale`
+- Trigger Postgres `enforce_character_slot_limit` enforce hard cap de 4 slots
+- `users.preferred_locale` persistido al cambiar idioma en switcher
+- Stack agregado: AWS SDK S3 (R2-compatible), `lib/r2/{client,upload}`, `lib/pixellab/client`, `lib/assets/register`
 
 ### Fase 3 — Mundo y exploración (pipeline maduro)
 - Generación procedural piso 100 (5 rooms iniciales para tutorial)

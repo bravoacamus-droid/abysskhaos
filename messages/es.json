@@ -15,6 +15,58 @@
     "welcome_named": "Bienvenido, {name}",
     "next_phase": "El descenso comienza pronto. Próxima fase: creación de personaje."
   },
+  "wizard": {
+    "title": "Forja a tu Condenado",
+    "step_class": "Elige tu clase",
+    "step_class_hint": "Cada clase moldea el camino de tu descenso. No se puede cambiar.",
+    "step_name": "Nombra a tu personaje",
+    "step_name_hint": "1–24 caracteres. Letras, números, y . _ - ' permitidos.",
+    "step_confirm": "Confirmar",
+    "step_confirm_hint": "Una vez vinculada, esta alma será tuya para siempre.",
+    "name_placeholder": "Aetherius",
+    "name_invalid": "Nombre inválido. 1–24 caracteres; solo letras, números, espacios y . - _ '.",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "create": "Vincular alma",
+    "creating": "Vinculando…",
+    "primary_attrs": "Atributos primarios",
+    "starting_stats": "Stats iniciales"
+  },
+  "hub": {
+    "level": "Nv {level}",
+    "tabs": {
+      "character": "Personaje",
+      "inventory": "Inventario",
+      "bestiary": "Bestiario",
+      "shop": "Tienda",
+      "map": "Mapa"
+    },
+    "placeholder_inventory": "El inventario se desbloquea en la Fase 5.",
+    "placeholder_bestiary": "El bestiario se desbloquea en la Fase 8.",
+    "placeholder_shop": "La tienda se desbloquea en la Fase 9.",
+    "placeholder_map": "El mapa se desbloquea en la Fase 3.",
+    "stats": {
+      "hp": "HP",
+      "mp": "MP",
+      "atk": "ATK",
+      "def": "DEF",
+      "strength": "FUE",
+      "agility": "AGI",
+      "intelligence": "INT",
+      "spirit": "ESP"
+    },
+    "current_floor": "Piso {floor}",
+    "no_floor": "Esperando el descenso"
+  },
+  "errors": {
+    "generic": "Algo salió mal",
+    "INVALID_NAME": "Nombre de personaje inválido.",
+    "CLASS_NOT_FOUND": "Clase no encontrada.",
+    "SLOT_OCCUPIED": "Ese slot ya está ocupado.",
+    "SLOT_LIMIT_EXCEEDED": "Has alcanzado el límite de slots de personaje.",
+    "NO_FREE_SLOTS": "No hay slots libres.",
+    "SLOT_NOT_UNLOCKED": "Ese slot requiere pago para desbloquearse."
+  },
   "language_switcher": {
     "label": "Idioma",
     "save": "Guardar"

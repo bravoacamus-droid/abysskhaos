@@ -15,6 +15,58 @@
     "welcome_named": "Willkommen, {name}",
     "next_phase": "Der Abstieg beginnt bald. Nächste Phase: Charaktererstellung."
   },
+  "wizard": {
+    "title": "Forge your Damned",
+    "step_class": "Choose your class",
+    "step_class_hint": "Each class shapes the path of your descent. Cannot be changed.",
+    "step_name": "Name your character",
+    "step_name_hint": "1–24 characters. Letters, numbers, and . _ - ' allowed.",
+    "step_confirm": "Confirm",
+    "step_confirm_hint": "Once bound, this soul is yours forever.",
+    "name_placeholder": "Aetherius",
+    "name_invalid": "Invalid name. 1–24 chars; letters, numbers, spaces and . - _ ' only.",
+    "back": "Back",
+    "next": "Next",
+    "create": "Bind soul",
+    "creating": "Binding…",
+    "primary_attrs": "Primary attributes",
+    "starting_stats": "Starting stats"
+  },
+  "hub": {
+    "level": "Lv {level}",
+    "tabs": {
+      "character": "Character",
+      "inventory": "Inventory",
+      "bestiary": "Bestiary",
+      "shop": "Shop",
+      "map": "Map"
+    },
+    "placeholder_inventory": "Inventory unlocks in Phase 5.",
+    "placeholder_bestiary": "Bestiary unlocks in Phase 8.",
+    "placeholder_shop": "Shop unlocks in Phase 9.",
+    "placeholder_map": "Map unlocks in Phase 3.",
+    "stats": {
+      "hp": "HP",
+      "mp": "MP",
+      "atk": "ATK",
+      "def": "DEF",
+      "strength": "STR",
+      "agility": "AGI",
+      "intelligence": "INT",
+      "spirit": "SPI"
+    },
+    "current_floor": "Floor {floor}",
+    "no_floor": "Awaiting descent"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "INVALID_NAME": "Invalid character name.",
+    "CLASS_NOT_FOUND": "Class not found.",
+    "SLOT_OCCUPIED": "That slot is already taken.",
+    "SLOT_LIMIT_EXCEEDED": "You've reached the character slot limit.",
+    "NO_FREE_SLOTS": "No free character slots.",
+    "SLOT_NOT_UNLOCKED": "That slot requires payment to unlock."
+  },
   "language_switcher": {
     "label": "Sprache",
     "save": "Speichern"
