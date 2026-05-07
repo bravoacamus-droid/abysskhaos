@@ -18,32 +18,34 @@ export default function Hub({ character, klass, locale }: Props) {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center gap-3 rounded-lg border border-abyss-coal/80 bg-abyss-deep p-3">
+      <header className="flex items-start gap-4 rounded-lg border border-abyss-coal/80 bg-abyss-deep p-4">
         {klass?.portrait_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={klass.portrait_url}
             alt={klass.name_localized}
-            width={56}
-            height={56}
-            className="h-14 w-14 rounded bg-abyss-void object-contain"
+            width={96}
+            height={96}
+            className="h-24 w-24 shrink-0 rounded-md border border-abyss-coal/60 bg-abyss-void object-contain"
             style={{ imageRendering: "pixelated" }}
           />
         ) : (
-          <div className="h-14 w-14 rounded bg-abyss-coal" />
+          <div className="h-24 w-24 shrink-0 rounded-md bg-abyss-coal" />
         )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-lg font-semibold text-white">{character.name}</p>
-          <p className="text-xs text-abyss-mist">
-            {klass?.name_localized ?? character.class_id}
-            {" · "}
-            {t(locale, "hub.level", { level: character.level })}
-          </p>
-        </div>
-        <div className="text-right text-[10px] uppercase tracking-widest text-abyss-fog">
-          {character.current_floor !== null
-            ? t(locale, "hub.current_floor", { floor: character.current_floor })
-            : t(locale, "hub.no_floor")}
+        <div className="min-w-0 flex-1 self-center">
+          <p className="truncate text-xl font-semibold text-white">{character.name}</p>
+          <p className="mt-1 text-sm text-abyss-mist">{klass?.name_localized ?? character.class_id}</p>
+          <div className="mt-2 flex items-center gap-3 text-[10px] uppercase tracking-widest text-abyss-fog">
+            <span className="font-mono text-abyss-mist">
+              {t(locale, "hub.level", { level: character.level })}
+            </span>
+            <span aria-hidden>·</span>
+            <span>
+              {character.current_floor !== null
+                ? t(locale, "hub.current_floor", { floor: character.current_floor })
+                : t(locale, "hub.no_floor")}
+            </span>
+          </div>
         </div>
       </header>
 

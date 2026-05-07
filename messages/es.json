@@ -70,5 +70,10 @@
   "language_switcher": {
     "label": "Idioma",
     "save": "Guardar"
+  },
+  "slot_picker": {
+    "forge": "Forjar",
+    "locked_paid": "Se desbloquea con USDT en la Fase 12",
+    "locked_short": "Bloqueado"
   }
 }

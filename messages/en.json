@@ -70,5 +70,10 @@
   "language_switcher": {
     "label": "Language",
     "save": "Save"
+  },
+  "slot_picker": {
+    "forge": "Forge",
+    "locked_paid": "Unlocks with USDT in Phase 12",
+    "locked_short": "Locked"
   }
 }

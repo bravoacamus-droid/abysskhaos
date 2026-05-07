@@ -54,6 +54,25 @@ export const DEFAULT_NEGATIVES =
   "text, watermark, signature, logo, multiple characters, blurry, photorealistic, 3d render, " +
   "modern photograph, anime screencap";
 
+/**
+ * Reusable framing strings. Use these in `buildPrompt({ framing })` for
+ * consistency across phases. Add new ones when a new asset shape comes up.
+ */
+export const FRAMING = {
+  /** Tight bust shot for class cards / NPC portraits. Critical: keeps the face large at 96×96. */
+  portrait_bust:
+    "tight bust shot, head and upper chest fill the entire frame, face is the focal point, " +
+    "no legs, no full body, no extra space around the figure, character looks slightly toward the viewer, " +
+    "transparent background",
+  /** Full-body for in-game sprites (Phase 3+). */
+  full_body_sprite:
+    "full body sprite, character standing, all four limbs visible, transparent background, " +
+    "consistent silhouette readability at small sizes",
+  /** Item icon (Phase 5+). */
+  item_icon:
+    "single item centered, no character, transparent background, readable silhouette at small sizes",
+} as const;
+
 export type BuildPromptInput = {
   /** The subject of the image: e.g. "muscular bearded warrior in iron plate armor". */
   subject: string;

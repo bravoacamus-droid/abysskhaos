@@ -14,7 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { base64ToBuffer, pixflux } from "../lib/pixellab/client";
 import { registerAsset } from "../lib/assets/register";
-import { buildPrompt, DEFAULT_NEGATIVES, type Mood } from "../data/art/style";
+import { buildPrompt, DEFAULT_NEGATIVES, FRAMING, type Mood } from "../data/art/style";
 
 loadEnv({ path: ".env.local" });
 
@@ -35,7 +35,7 @@ const supabase = createClient(url, serviceKey, {
 // Hades-epic. Bosses and Entidades will lean epic in later phases.
 const CLASS_MOOD: Mood = "serious";
 
-const FRAMING = "head and shoulders portrait, single character centered, transparent background, facing slightly forward";
+const PORTRAIT_FRAMING = FRAMING.portrait_bust;
 
 type ClassPrompt = {
   classId: string;
@@ -94,7 +94,7 @@ async function main() {
     const prompt = buildPrompt({
       subject: c.description,
       mood: CLASS_MOOD,
-      framing: FRAMING,
+      framing: PORTRAIT_FRAMING,
     });
     console.log(`\n[${c.classId}] generating...`);
 

@@ -13,9 +13,10 @@ type Props = {
   initData: string;
   locale: Locale;
   onCreated: (character: CharacterRow) => void;
+  onCancel?: () => void;
 };
 
-export default function CharacterCreate({ initData, locale, onCreated }: Props) {
+export default function CharacterCreate({ initData, locale, onCreated, onCancel }: Props) {
   const [classes, setClasses] = useState<ClassRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("class");
@@ -58,7 +59,16 @@ export default function CharacterCreate({ initData, locale, onCreated }: Props) 
 
   return (
     <div className="space-y-6">
-      <header className="text-center">
+      <header className="relative text-center">
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="absolute left-0 top-0 rounded-md border border-abyss-coal/60 px-2 py-1 text-[10px] uppercase tracking-widest text-abyss-fog hover:border-abyss-fog/60 hover:text-abyss-mist"
+          >
+            ✕
+          </button>
+        ) : null}
         <h1 className="bg-gradient-to-b from-abyss-soul via-abyss-khaos to-abyss-ember bg-clip-text text-3xl font-bold uppercase tracking-widest text-transparent">
           {t(locale, "wizard.title")}
         </h1>

@@ -15,14 +15,15 @@ import { CANONICAL_LOCALE, isSupportedLocale, pickLocale, t, type Locale } from 
 import CharacterCreate from "./CharacterCreate";
 import Hub from "./Hub";
 import LanguageSwitcher from "./LanguageSwitcher";
+import SlotPicker from "./SlotPicker";
 
 const LOCALE_STORAGE_KEY = "abyss.locale";
 
 type State =
   | { status: "boot" }
   | { status: "rejected"; message: string }
-  | { status: "wizard"; classes: ClassRow[] }
-  | { status: "hub"; character: CharacterRow; classes: ClassRow[] };
+  | { status: "wizard"; classes: ClassRow[]; characters: CharacterRow[]; activeId: string | null }
+  | { status: "hub"; classes: ClassRow[]; characters: CharacterRow[]; activeId: string };
 
 export default function GameShell() {
   const [initData, setInitData] = useState<string | null>(null);
@@ -70,7 +71,6 @@ export default function GameShell() {
       setInitData(id);
 
       try {
-        // Auth: register/refresh the user row + capture preferred_locale.
         const authRes = await fetch("/api/auth/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -81,7 +81,6 @@ export default function GameShell() {
           throw new ApiError(body.error ?? `HTTP_${authRes.status}`, body.detail, authRes.status);
         }
 
-        // Pull catalog + character list in parallel.
         const [classes, characters] = await Promise.all([
           fetchClasses({ initData: id, locale: chosenLocale, signal: undefined }),
           fetchCharacters({ initData: id, signal: undefined }),
@@ -89,11 +88,14 @@ export default function GameShell() {
         if (cancelled) return;
 
         if (characters.length === 0) {
-          setState({ status: "wizard", classes });
+          setState({ status: "wizard", classes, characters: [], activeId: null });
         } else {
-          // Pick the active slot — for now, the first slot.
-          const character = characters[0]!;
-          setState({ status: "hub", character, classes });
+          setState({
+            status: "hub",
+            classes,
+            characters,
+            activeId: characters[0]!.id,
+          });
         }
       } catch (err) {
         if (cancelled) return;
@@ -105,8 +107,6 @@ export default function GameShell() {
     }
   }, []);
 
-  // When the user changes locale via the switcher, persist to localStorage
-  // and (best-effort) sync to the DB so future devices match.
   function handleLocaleChange(next: Locale) {
     setLocale(next);
     try {
@@ -115,12 +115,37 @@ export default function GameShell() {
       // ignore
     }
     if (initData) {
-      // Fire-and-forget; failure here doesn't break the UX.
       updatePreferredLocale({ initData, locale: next, signal: undefined }).catch(() => {});
     }
   }
 
-  const klassById = useMemo(() => {
+  function handleForgeAnother() {
+    if (state.status !== "hub") return;
+    setState({
+      status: "wizard",
+      classes: state.classes,
+      characters: state.characters,
+      activeId: state.activeId,
+    });
+  }
+
+  function handleSelectCharacter(id: string) {
+    if (state.status !== "hub") return;
+    setState({ ...state, activeId: id });
+  }
+
+  function handleCreated(character: CharacterRow) {
+    if (state.status !== "wizard") return;
+    const characters = [...state.characters, character].sort((a, b) => a.slot_index - b.slot_index);
+    setState({
+      status: "hub",
+      classes: state.classes,
+      characters,
+      activeId: character.id,
+    });
+  }
+
+  const klassMap = useMemo(() => {
     const map = new Map<string, ClassRow>();
     if (state.status === "wizard" || state.status === "hub") {
       for (const c of state.classes) map.set(c.id, c);
@@ -128,31 +153,61 @@ export default function GameShell() {
     return map;
   }, [state]);
 
+  const activeCharacter =
+    state.status === "hub"
+      ? state.characters.find((c) => c.id === state.activeId) ?? null
+      : null;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         <LanguageSwitcher current={locale} onChange={handleLocaleChange} />
       </div>
 
-      {state.status === "boot" ? (
-        <Boot locale={locale} />
-      ) : state.status === "rejected" ? (
+      {state.status === "boot" ? <Boot locale={locale} /> : null}
+
+      {state.status === "rejected" ? (
         <Rejected message={state.message} locale={locale} />
-      ) : state.status === "wizard" ? (
+      ) : null}
+
+      {state.status === "hub" && activeCharacter ? (
+        <>
+          {state.characters.length > 0 || true ? (
+            <SlotPicker
+              characters={state.characters}
+              activeId={state.activeId}
+              classMap={klassMap}
+              locale={locale}
+              onSelect={handleSelectCharacter}
+              onForge={handleForgeAnother}
+            />
+          ) : null}
+          <Hub
+            character={activeCharacter}
+            klass={klassMap.get(activeCharacter.class_id) ?? null}
+            locale={locale}
+          />
+        </>
+      ) : null}
+
+      {state.status === "wizard" && initData ? (
         <CharacterCreate
-          initData={initData!}
+          initData={initData}
           locale={locale}
-          onCreated={(character) =>
-            setState({ status: "hub", character, classes: state.classes })
+          onCreated={handleCreated}
+          onCancel={
+            state.activeId
+              ? () =>
+                  setState({
+                    status: "hub",
+                    classes: state.classes,
+                    characters: state.characters,
+                    activeId: state.activeId!,
+                  })
+              : undefined
           }
         />
-      ) : (
-        <Hub
-          character={state.character}
-          klass={klassById.get(state.character.class_id) ?? null}
-          locale={locale}
-        />
-      )}
+      ) : null}
     </div>
   );
 }
