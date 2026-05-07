@@ -98,11 +98,15 @@ export async function verifyInitData(
     throw new InitDataError("initData is missing `hash`", "MISSING_HASH");
   }
 
+  // Per spec, only `hash` is excluded from the data-check-string. The newer
+  // `signature` field (Ed25519 third-party validation) IS part of the string
+  // for the bot-token HMAC pathway. Excluding it is a correctness bug.
+  // https://core.telegram.org/bots/webapps#validating-data-for-mini-apps
   const raw: Record<string, string> = {};
   const dataLines: string[] = [];
   const keys: string[] = [];
   for (const [key, value] of params.entries()) {
-    if (key === "hash" || key === "signature") continue;
+    if (key === "hash") continue;
     raw[key] = value;
     keys.push(key);
   }
