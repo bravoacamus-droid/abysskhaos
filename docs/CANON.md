@@ -107,7 +107,22 @@ Otros estados existentes (Confusión, Silenciado, Miedo, Dormido, Frío, etc.) s
 - **[med] Cero Tiempo (Hoja Trascendente Prestige):** Doc 1 dice 4 turnos; Doc 6A/8 dice 3 turnos. **Decisión: 3 turnos.**
 - **[med] Sets de bioma:** validar caso por caso si son 5 o 6 piezas (sin escudo = 5).
 - **[med] Centinela Primordial vs Guardián del Abismo:** son entidades distintas. En código: `centinela_primordial` (boss S1 piso 71) y `guardian_del_abismo` (referencia narrativa, no entidad).
-- **[low] Estilo visual de referencia:** se adopta el del Doc 5: *"FF VI × Chrono Trigger × Hollow Knight × Octopath × Hades"*.
+- **[high] Estilo visual de referencia:** unión de Doc 1 (FF × Pokémon × Hollow Knight) + Doc 5 (FF VI × Chrono Trigger × Hollow Knight × Octopath × Hades). **Decisión: las 6 referencias canónicas son** Final Fantasy VI · Chrono Trigger · **Pokémon** · Hollow Knight · Octopath Traveler · Hades. Todas se inyectan literalmente al prompt de PixelLab.
+
+## 8. Eje de tono (mood) — direccion artística
+
+Las 6 referencias mezclan tonos según el rol del personaje. Para que el arte de Abyss conecte con el jugador, **cada asset que se genere lleva un `mood` explícito** entre 4 valores:
+
+| Mood | Cuándo aplica | Inspiración primaria |
+|---|---|---|
+| `friendly` | Mobs Tier I al inicio (Goblin, Keese, Zombie Menor); pets de Vínculo en tier bajo; UI mascots; consumibles "amistosos" (pociones); NPCs comerciales accesibles. | Pokémon (charm cute, expresivo) + early Hollow Knight (villager warmth) |
+| `serious` | Personajes jugadores (las 5 clases base + híbridos); mobs Tier II–III; NPCs maduros (Cedric, Ignar, Mira); ítems Comunes–Mágicos. | FF VI + Octopath Traveler (gravitas mature, weathered) |
+| `epic` | Bosses (Tier V), World Bosses (Tier V+), Entidades del Abismo (Guardián, Enviado), ítems Épicos+/Únicos, NPCs raros (Heraldo Sin Nombre), retratos PP-III, NFTs cosméticos. | Hades (rim lighting dramático, glow) + Chrono Trigger (cinematic boss reveals) |
+| `mixed` | Sets de equipamiento que combinan tones; biomas con dualidad (Sala del Arquitecto, Memoria); transition mobs Tier IV. | Combinación de las 6 según contexto. |
+
+**Por qué esto importa**: arte uniforme se siente plano. Un Goblin Tier I que se ve igual de épico que el Centinela Primordial confunde al jugador sobre la dificultad. Un Cedric que se ve como mascot de Pokémon rompe la lore. El eje mood es la traducción directa del "tonal range" de las 6 referencias a una decisión binaria en cada generación.
+
+**Implementación** (vinculante): el módulo [`data/art/style.ts`](../data/art/style.ts) expone `buildPrompt({ subject, mood, framing, extra })` y todas las generaciones a partir de la Fase 3 lo usan. Los 5 retratos de clase de la Fase 2 fueron generados antes de formalizar este eje y pueden regenerarse con `mood: "serious"` si se decide.
 
 ---
 

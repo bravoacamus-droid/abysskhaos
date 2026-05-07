@@ -48,8 +48,17 @@ de créditos). API key vive en `.local-secrets/CREDENTIALS.md`.
 | Retrato NPC | 96×96 | `pixflux` |
 
 Restricciones de paleta del Doc 5: **máx 32 colores en uso**, **máx 4 sombras
-por color base**. Estilo de referencia: *"FF VI × Chrono Trigger × Hollow
-Knight × Octopath × Hades"*.
+por color base**.
+
+**Estilo de referencia canónico** (6 juegos, ver [`docs/CANON.md`](CANON.md) §7):
+**Final Fantasy VI · Chrono Trigger · Pokémon · Hollow Knight · Octopath Traveler · Hades**.
+
+**Eje de tono / mood** (ver CANON.md §8): cada generación lleva un mood
+explícito entre `friendly` (Pokémon-charm) · `serious` (FF VI / Octopath
+gravitas) · `epic` (Hades dramático) · `mixed`. El módulo
+[`data/art/style.ts`](../data/art/style.ts) expone `buildPrompt({ subject, mood,
+framing, extra })` y **todas las llamadas a PixelLab desde la Fase 3 deben
+pasar por él** — nunca hardcodear prompts inline.
 
 ## Pipeline canónico
 

@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { base64ToBuffer, pixflux } from "../lib/pixellab/client";
 import { registerAsset } from "../lib/assets/register";
+import { buildPrompt, DEFAULT_NEGATIVES, type Mood } from "../data/art/style";
 
 loadEnv({ path: ".env.local" });
 
@@ -28,15 +29,13 @@ const supabase = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
 });
 
-// Common style guidance, applied to every class so the 5 portraits look like
-// they belong to the same game (per Doc 5: "FF VI × Chrono Trigger × Hollow
-// Knight × Octopath × Hades").
-const STYLE_BASE =
-  "pixel art portrait, dark fantasy RPG character, neon-on-void palette, " +
-  "high contrast, single character facing forward, head and shoulders, " +
-  "centered composition, transparent background";
+// The 5 base classes are the player's "Damned" — mature heroes descending
+// into the abyss. Per CANON.md §8 they're `serious` mood: weathered, FF VI /
+// Octopath gravitas with a single accent color, not Pokemon-cute and not
+// Hades-epic. Bosses and Entidades will lean epic in later phases.
+const CLASS_MOOD: Mood = "serious";
 
-const NEGATIVE = "text, watermark, signature, multiple characters, blurry, photorealistic, 3d";
+const FRAMING = "head and shoulders portrait, single character centered, transparent background, facing slightly forward";
 
 type ClassPrompt = {
   classId: string;
@@ -92,13 +91,17 @@ async function main() {
   let totalCost = 0;
 
   for (const c of CLASS_PROMPTS) {
-    const prompt = `${c.description}. ${STYLE_BASE}`;
+    const prompt = buildPrompt({
+      subject: c.description,
+      mood: CLASS_MOOD,
+      framing: FRAMING,
+    });
     console.log(`\n[${c.classId}] generating...`);
 
     const stageT0 = Date.now();
     const res = await pixflux({
       description: prompt,
-      negative_description: NEGATIVE,
+      negative_description: DEFAULT_NEGATIVES,
       image_size: { width: 96, height: 96 },
       no_background: true,
       outline: "single color black outline",
@@ -122,7 +125,7 @@ async function main() {
       generationSize: "96x96",
       costUsd: res.usage.usd,
       generatedVia: "http_api",
-      metadata: { class_name: c.name, view: "side", direction: "south" },
+      metadata: { class_name: c.name, view: "side", direction: "south", mood: CLASS_MOOD },
     });
 
     totalCost += res.usage.usd;
