@@ -43,6 +43,9 @@ coverage/
 # MCP server config (contains real bearer tokens; .mcp.json.example is the template)
 .mcp.json
 
+# Local archive of orphan R2 assets, kept for historical reference; never committed
+.local-r2-archive/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

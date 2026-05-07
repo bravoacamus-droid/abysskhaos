@@ -18,7 +18,8 @@ body {
   touch-action: manipulation;
 }
 
-#__next,
+/* Lock the document so Telegram's rubber-band effect doesn't kick in.
+   The single scrollable element is `<main>` (see app/page.tsx). */
 body {
   height: 100dvh;
   overflow: hidden;
