@@ -47,20 +47,20 @@ type Job = {
 
 const JOBS: Job[] = [
   {
-    characterId: "baec1dd5-fd43-4b77-8235-82c5e743d5d3",
+    characterId: "3ab3593a-a4df-40c7-bd0e-9c29344cb8ce",
     target: { table: "classes", id: "warrior" },
     entityId: "warrior",
-    label: "Camus chibi v2 (warrior class)",
+    label: "Camus warrior v3 octopath",
     prompt:
-      "chibi RPG warrior, big head and small body, dark iron plate armor with crimson trim, top-down pixel art, FF Pixel Remaster + Chrono Trigger overworld vibe",
+      "HD-2D pixel art warrior, Octopath Traveler / FF VI Pixel Remaster style, head ~1/3 of body, defined dark iron plate armor with crimson trim, two-handed sword on back, top-down 64px sprite",
   },
   {
-    characterId: "eeac0c89-9c4f-4340-89f0-91de71549f24",
+    characterId: "69d030fa-fb6c-4b89-938c-757593554e67",
     target: { table: "npcs", id: "cedric_the_broken" },
     entityId: "cedric_the_broken",
-    label: "Cedric the Broken chibi v2",
+    label: "Cedric NPC v3 octopath",
     prompt:
-      "chibi NPC ex-gladiator, big head small body, missing left arm, leather smithing apron, top-down pixel art, FF Pixel Remaster vibe",
+      "HD-2D pixel art ex-gladiator, Octopath Traveler / FF VI Pixel Remaster style, missing left arm, leather smithing apron, weathered face with grey-streaked beard, top-down 64px sprite",
   },
 ];
 
@@ -162,7 +162,7 @@ async function uploadFrame(
     field,
     prompt: job.prompt,
     endpoint: "mcp_animate_character",
-    generationSize: "48x48",
+    generationSize: "92x92",
     generatedVia: "mcp",
     metadata: {
       label: job.label,
