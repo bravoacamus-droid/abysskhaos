@@ -34,15 +34,18 @@ const TURN_COOLDOWN_MS = 80;
  */
 const CHARACTER_SCALE = 1;
 
-export type SceneEvents = {
-  "npc-adjacent": (data: { npcId: string | null }) => void;
-  "exit-requested": (data: { direction: Direction }) => void;
+export type SceneCallbacks = {
+  onExitRequested?: (direction: Direction) => void;
+  onNpcAdjacent?: (npcId: string | null) => void;
 };
+
+export type SceneInitData = { state: RoomState; callbacks?: SceneCallbacks };
 
 export class AbyssScene extends Phaser.Scene {
   static KEY = "abyss-scene";
 
   private state!: RoomState;
+  private callbacks: SceneCallbacks = {};
   private player?: Phaser.GameObjects.Sprite;
   private npcSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private playerTile = { x: 0, y: 0 };
@@ -57,8 +60,9 @@ export class AbyssScene extends Phaser.Scene {
     super(AbyssScene.KEY);
   }
 
-  init(data: { state: RoomState }) {
+  init(data: SceneInitData) {
     this.state = data.state;
+    this.callbacks = data.callbacks ?? {};
     this.adjacentNpcId = null;
     this.npcSprites.clear();
   }
@@ -210,12 +214,14 @@ export class AbyssScene extends Phaser.Scene {
   }
 
   private attemptMove(dir: Direction) {
-    const map = this.state.room.tilemap_data!;
-    // Always update facing — even if we can't move, you can turn in place.
+    const map = this.state.room.tilemap_data;
+    if (!map) return;
+
+    // Update facing on every press — taps shouldn't require a separate
+    // "turn" step before moving. Pokemon-style turn-only behaviour was
+    // confusing on a D-pad where each tap is its own intent.
     if (this.playerDir !== dir) {
       this.setPlayerFacing(dir);
-      this.moveCooldownMs = TURN_COOLDOWN_MS;
-      return;
     }
 
     const dx = dir === "east" ? 1 : dir === "west" ? -1 : 0;
@@ -227,18 +233,19 @@ export class AbyssScene extends Phaser.Scene {
     for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
       if (!exit) continue;
       if (nx === exit.x && ny === exit.y) {
-        this.events.emit("exit-requested", { direction: exitDirRaw as Direction });
+        this.callbacks.onExitRequested?.(exitDirRaw as Direction);
         this.moveCooldownMs = 600;
         return;
       }
     }
 
+    // Wall — already turned, just absorb the cooldown.
     if (isWallCell(map, nx, ny)) {
-      // Blocked. Brief cooldown so the player isn't spammed.
       this.moveCooldownMs = TURN_COOLDOWN_MS;
       return;
     }
 
+    // Free tile — commit the step.
     this.playerTile = { x: nx, y: ny };
     if (this.player) {
       this.player.x = nx * RENDERED_TILE + RENDERED_TILE / 2;
@@ -261,7 +268,7 @@ export class AbyssScene extends Phaser.Scene {
     }
     if (adj !== this.adjacentNpcId) {
       this.adjacentNpcId = adj;
-      this.events.emit("npc-adjacent", { npcId: adj });
+      this.callbacks.onNpcAdjacent?.(adj);
     }
   }
 }
