@@ -100,6 +100,11 @@ export default function PhaserExploration({
           },
           scene: [],
           autoFocus: false,
+          // Listen to input events ONLY on the canvas, not on the window. Without
+          // this Phaser registers global touch handlers that capture taps on the
+          // overlaid D-pad buttons before they reach React. Keyboard arrows still
+          // work because they're registered on the canvas focus.
+          input: { windowEvents: false },
         });
         gameRef.current = game;
 
@@ -214,8 +219,11 @@ export default function PhaserExploration({
           </button>
         ) : null}
 
-        {/* D-pad pinned to bottom-right of the canvas as a HUD overlay */}
-        <div className="absolute bottom-2 right-2">
+        {/* D-pad pinned to bottom-right of the canvas as a HUD overlay.
+            Explicit z-index so it sits above the Phaser <canvas>, and the
+            buttons stop propagation in their handlers so any stray Phaser
+            input listener can't swallow the tap. */}
+        <div className="absolute bottom-2 right-2 z-30">
           <DPad onPress={dpadPress} onHold={dpadHold} disabled={moving} />
         </div>
 
@@ -270,7 +278,7 @@ function DPad({
     { id: "south", row: 3, col: 2, arrow: "↓" },
   ];
   return (
-    <div className="grid grid-cols-3 grid-rows-3 gap-1 w-[136px] select-none">
+    <div className="grid grid-cols-3 grid-rows-3 gap-1 w-[160px] select-none">
       {dirs.map((d) => (
         <button
           key={d.id}
@@ -279,14 +287,28 @@ function DPad({
           onPointerDown={(e) => {
             if (disabled) return;
             e.preventDefault();
+            e.stopPropagation();
             onPress(d.id);
             onHold(d.id);
           }}
-          onPointerUp={() => onHold(null)}
+          onPointerUp={(e) => {
+            e.stopPropagation();
+            onHold(null);
+          }}
           onPointerLeave={() => onHold(null)}
           onPointerCancel={() => onHold(null)}
+          // Older mobile browsers (some Telegram WebViews) deliver touchstart
+          // before pointerdown is normalised — handle both so the input is
+          // never swallowed by a sibling.
+          onTouchStart={(e) => {
+            if (disabled) return;
+            e.stopPropagation();
+            onPress(d.id);
+            onHold(d.id);
+          }}
+          onTouchEnd={() => onHold(null)}
           style={{ gridRow: d.row, gridColumn: d.col, touchAction: "none" }}
-          className="h-10 w-10 rounded-md border border-abyss-coal/80 bg-abyss-deep/95 text-base text-abyss-mist shadow-md backdrop-blur transition active:bg-abyss-khaos/40 active:text-white disabled:opacity-50"
+          className="h-12 w-12 rounded-md border border-abyss-coal/80 bg-abyss-deep/95 text-lg text-abyss-mist shadow-md backdrop-blur transition active:bg-abyss-khaos/40 active:text-white disabled:opacity-50"
         >
           {d.arrow}
         </button>
