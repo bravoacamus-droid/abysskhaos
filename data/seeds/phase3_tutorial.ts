@@ -115,6 +115,127 @@ const CONNECTIONS: Array<{ fromSlug: string; toSlug: string; direction: Directio
 ];
 
 // -----------------------------------------------------------------------------
+// Tilemap layouts. The Phaser scene reads `tiles` as a 2D char grid and pairs
+// each cell with a Wang tile from the biome tileset. `#` = wall (upper terrain)
+// `.` = floor (lower terrain). `spawn` is the default position when the
+// character first enters; `exits` map a connection direction to the tile cell
+// the player must reach to trigger the transition.
+// -----------------------------------------------------------------------------
+
+type TilemapData = {
+  width: number;
+  height: number;
+  tiles: string[]; // each string is one row; chars: '#' wall, '.' floor
+  spawn: { x: number; y: number };
+  exits: Partial<Record<Direction, { x: number; y: number }>>;
+  /** Optional decorative props painted in the scene (Phase 3c+). */
+  props?: Array<{ kind: string; x: number; y: number }>;
+};
+
+const TILEMAPS: Record<string, TilemapData> = {
+  // The Crossing — main hub, Cedric stands near the anvil at the north
+  f100_r01: {
+    width: 9,
+    height: 7,
+    tiles: [
+      "####.####", // row 0 — north wall with center exit at x=4
+      "#.......#",
+      "#.......#",
+      "#.......#",
+      "#.......#",
+      "#.......#",
+      "#########",
+    ],
+    spawn: { x: 4, y: 5 },
+    exits: { north: { x: 4, y: 0 } },
+    props: [{ kind: "anvil", x: 4, y: 1 }],
+  },
+  // The Awakening — narrow north-south corridor
+  f100_r02: {
+    width: 5,
+    height: 8,
+    tiles: [
+      "##.##",
+      "#...#",
+      "#...#",
+      "#...#",
+      "#...#",
+      "#...#",
+      "#...#",
+      "##.##",
+    ],
+    spawn: { x: 2, y: 6 },
+    exits: { north: { x: 2, y: 0 }, south: { x: 2, y: 7 } },
+  },
+  // First Encounter — chamber with broken pillars, hostile feel
+  f100_r03: {
+    width: 9,
+    height: 7,
+    tiles: [
+      "####.####",
+      "#.......#",
+      "#..#.#..#",
+      "#.......#",
+      "#..#.#..#",
+      "#.......#",
+      "####.####",
+    ],
+    spawn: { x: 4, y: 5 },
+    exits: {
+      north: { x: 4, y: 0 },
+      south: { x: 4, y: 6 },
+      east: { x: 8, y: 3 },
+    },
+  },
+  // The Cracked Steps — landing with a chest on the east wall
+  f100_r04: {
+    width: 9,
+    height: 7,
+    tiles: [
+      "####.####",
+      "#.......#",
+      "#.......#",
+      ".......##",
+      "#.......#",
+      "#.......#",
+      "####.####",
+    ],
+    spawn: { x: 4, y: 5 },
+    exits: {
+      north: { x: 4, y: 0 },
+      south: { x: 4, y: 6 },
+      west: { x: 0, y: 3 },
+    },
+    props: [{ kind: "chest", x: 7, y: 3 }],
+  },
+  // Threshold's Edge — terminal room with the spiral stair
+  f100_r05: {
+    width: 7,
+    height: 7,
+    tiles: [
+      "#######",
+      "#.....#",
+      "#.....#",
+      "#.....#",
+      "#.....#",
+      "#.....#",
+      "###.###",
+    ],
+    spawn: { x: 3, y: 5 },
+    exits: { south: { x: 3, y: 6 } },
+    props: [{ kind: "spiral_stair", x: 3, y: 3 }],
+  },
+};
+
+// -----------------------------------------------------------------------------
+// NPC placements within rooms (tile coordinates).
+// -----------------------------------------------------------------------------
+
+const NPC_PLACEMENTS: Array<{ roomSlug: string; npcId: string; tileX: number; tileY: number }> = [
+  { roomSlug: "f100_r01", npcId: "cedric_the_broken", tileX: 4, tileY: 2 },
+];
+
+// -----------------------------------------------------------------------------
 // Cedric's first-meet dialogue.
 // -----------------------------------------------------------------------------
 
@@ -182,6 +303,7 @@ export async function seedPhase3Tutorial(client: SupabaseClient): Promise<SeedRe
     if (selErr) throw new Error(`select rooms: ${selErr.message}`);
 
     let roomId: string;
+    const tilemap = TILEMAPS[r.slug] ?? null;
     if (existing) {
       const { error: updErr } = await client
         .from("rooms")
@@ -191,6 +313,7 @@ export async function seedPhase3Tutorial(client: SupabaseClient): Promise<SeedRe
           room_type: r.room_type,
           is_safe: r.is_safe,
           biome_id: r.biome_id,
+          tilemap_data: tilemap,
         })
         .eq("id", existing.id);
       if (updErr) throw new Error(`update rooms: ${updErr.message}`);
@@ -206,6 +329,7 @@ export async function seedPhase3Tutorial(client: SupabaseClient): Promise<SeedRe
           room_type: r.room_type,
           is_safe: r.is_safe,
           biome_id: r.biome_id,
+          tilemap_data: tilemap,
         })
         .select("id")
         .single();
@@ -244,16 +368,18 @@ export async function seedPhase3Tutorial(client: SupabaseClient): Promise<SeedRe
   if (connErr) throw new Error(`upsert room_connections: ${connErr.message}`);
   reports.push({ table: "room_connections", rows: connectionRows.length, translations: 0 });
 
-  // 3. Cedric in room 1.
-  const cedricRoomId = slugToId.get("f100_r01")!;
+  // 3. NPC placements (Cedric in room 1 with tile coordinates).
+  const npcRows = NPC_PLACEMENTS.map((p) => ({
+    room_id: slugToId.get(p.roomSlug)!,
+    npc_id: p.npcId,
+    tile_x: p.tileX,
+    tile_y: p.tileY,
+  }));
   const { error: rnErr } = await client
     .from("room_npcs")
-    .upsert(
-      [{ room_id: cedricRoomId, npc_id: "cedric_the_broken" }],
-      { onConflict: "room_id,npc_id" },
-    );
+    .upsert(npcRows, { onConflict: "room_id,npc_id" });
   if (rnErr) throw new Error(`upsert room_npcs: ${rnErr.message}`);
-  reports.push({ table: "room_npcs", rows: 1, translations: 0 });
+  reports.push({ table: "room_npcs", rows: npcRows.length, translations: 0 });
 
   // 4. Dialogue (npc_dialogues + npc_dialogue_lines + ES translations).
   const { data: existingDlg, error: dlgSelErr } = await client

@@ -87,7 +87,8 @@
     "dialogue_loading": "Reading the silence…",
     "dialogue_empty": "There is nothing left to say.",
     "dialogue_next": "Continue",
-    "dialogue_close": "End"
+    "dialogue_close": "End",
+    "talk_prompt": "Tap to speak"
   },
   "errors": {
     "generic": "Something went wrong",

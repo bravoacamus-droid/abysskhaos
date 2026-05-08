@@ -124,21 +124,54 @@ export function updatePreferredLocale(opts: FetchOpts & { locale: string }): Pro
   });
 }
 
+export type Direction = "north" | "south" | "east" | "west";
+
+export type SpriteAtlas = Partial<Record<Direction, string>>;
+
 export type RoomNpc = {
   id: string;
   name: string;
   title: string | null;
   portrait_url: string | null;
+  sprite_atlas: SpriteAtlas | null;
+  tile_x: number | null;
+  tile_y: number | null;
   has_unmet_first_dialogue: boolean;
   name_localized: string;
   title_localized: string | null;
 };
 
 export type RoomConnectionRow = {
-  direction: "north" | "south" | "east" | "west";
+  direction: Direction;
   to_room_id: string;
   is_locked: boolean;
   unlock_requirement: string | null;
+};
+
+export type TilemapData = {
+  width: number;
+  height: number;
+  tiles: string[];
+  spawn: { x: number; y: number };
+  exits: Partial<Record<Direction, { x: number; y: number }>>;
+  props?: Array<{ kind: string; x: number; y: number }>;
+};
+
+export type WangTileMeta = {
+  id: string;
+  corners: {
+    NW: "upper" | "lower";
+    NE: "upper" | "lower";
+    SW: "upper" | "lower";
+    SE: "upper" | "lower";
+  };
+  bounding_box: { x: number; y: number; width: number; height: number };
+};
+
+export type WangTilesetMeta = {
+  format: string;
+  tiles: WangTileMeta[];
+  tileset_image: { filename: string; dimensions: { width: number; height: number } };
 };
 
 export type RoomState = {
@@ -153,6 +186,17 @@ export type RoomState = {
     name_localized: string;
     description: string | null;
     description_localized: string | null;
+    tilemap_data: TilemapData | null;
+  };
+  biome: {
+    id: string;
+    tileset_url: string | null;
+    tileset_metadata: WangTilesetMeta | null;
+  } | null;
+  player: {
+    class_id: string;
+    sprite_atlas: SpriteAtlas | null;
+    portrait_url: string | null;
   };
   connections: RoomConnectionRow[];
   npcs: RoomNpc[];
@@ -179,7 +223,7 @@ export function fetchRoom(opts: FetchOpts & { characterId: string; locale: strin
 }
 
 export function moveCharacter(
-  opts: FetchOpts & { characterId: string; direction: "north" | "south" | "east" | "west" },
+  opts: FetchOpts & { characterId: string; direction: Direction },
 ): Promise<{ current_room_id: string; current_floor: number }> {
   return call(`/api/v1/characters/${opts.characterId}/move`, "POST", {
     initData: opts.initData,

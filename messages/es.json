@@ -87,7 +87,8 @@
     "dialogue_loading": "Leyendo el silencio…",
     "dialogue_empty": "No queda nada por decir.",
     "dialogue_next": "Continuar",
-    "dialogue_close": "Terminar"
+    "dialogue_close": "Terminar",
+    "talk_prompt": "Toca para hablar"
   },
   "errors": {
     "generic": "Algo salió mal",

@@ -7,14 +7,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/v1/characters/:id/room → current room with NPCs, connections,
- * and the localized name + description.
- *
- * Locale fold-in: pass ?locale=es and the response includes name_localized /
- * description_localized for the room and any NPCs.
+ * GET /api/v1/characters/:id/room → everything the Phaser scene needs to
+ * render the current room: tilemap data, biome tileset, NPC sprite atlases
+ * + tile coordinates, the player's class sprite atlas, and the localized
+ * room name + description for the banner overlay.
  *
  * Side-effect: marks `character_room_visits` (first_visited_at + bumps
- * last_visited_at). Idempotent.
+ * last_visited_at).
  */
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = await resolveSession(req);
@@ -25,10 +24,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const supabase = getSupabaseAdmin();
 
-  // Verify ownership.
   const { data: character, error: charErr } = await supabase
     .from("characters")
-    .select("id, user_id, current_room_id, current_floor")
+    .select("id, user_id, current_room_id, current_floor, class_id")
     .eq("id", params.id)
     .eq("is_active", true)
     .maybeSingle();
@@ -37,8 +35,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  // If the character has no current_room_id yet (just created), drop them in
-  // floor 100 room 1 (The Crossing).
+  // Drop fresh characters in The Crossing (Floor 100, room 1) on first call.
   let roomId = character.current_room_id as string | null;
   if (!roomId) {
     const { data: entry, error: entryErr } = await supabase
@@ -58,43 +55,71 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     if (setErr) return NextResponse.json({ error: "DB_FAILED", detail: setErr.message }, { status: 500 });
   }
 
-  // Fetch room + connections + npcs in parallel.
-  const [roomRes, connRes, npcRes] = await Promise.all([
+  const [roomRes, connRes, npcRes, classRes] = await Promise.all([
     supabase
       .from("rooms")
-      .select("id, floor_number, room_index, name, description, room_type, is_safe, biome_id")
+      .select(
+        "id, floor_number, room_index, name, description, room_type, is_safe, biome_id, tilemap_data",
+      )
       .eq("id", roomId)
       .single(),
     supabase
       .from("room_connections")
       .select("direction, to_room_id, is_locked, unlock_requirement")
       .eq("from_room_id", roomId),
-    supabase.from("room_npcs").select("npc_id").eq("room_id", roomId),
+    supabase
+      .from("room_npcs")
+      .select("npc_id, tile_x, tile_y")
+      .eq("room_id", roomId),
+    supabase
+      .from("classes")
+      .select("id, name, sprite_atlas, portrait_url")
+      .eq("id", character.class_id)
+      .single(),
   ]);
 
   if (roomRes.error) return NextResponse.json({ error: "DB_FAILED", detail: roomRes.error.message }, { status: 500 });
   if (connRes.error) return NextResponse.json({ error: "DB_FAILED", detail: connRes.error.message }, { status: 500 });
   if (npcRes.error) return NextResponse.json({ error: "DB_FAILED", detail: npcRes.error.message }, { status: 500 });
+  if (classRes.error) return NextResponse.json({ error: "DB_FAILED", detail: classRes.error.message }, { status: 500 });
 
   const room = roomRes.data;
   const connections = connRes.data ?? [];
-  const npcIds = (npcRes.data ?? []).map((r) => r.npc_id as string);
+  const npcRowsByRoom = npcRes.data ?? [];
+  const klass = classRes.data;
+
+  // Biome tileset.
+  let biome: { id: string; tileset_url: string | null; tileset_metadata: unknown } | null = null;
+  if (room.biome_id) {
+    const { data: biomeRow, error: bErr } = await supabase
+      .from("biomes")
+      .select("id, tileset_url, tileset_metadata")
+      .eq("id", room.biome_id)
+      .single();
+    if (bErr) return NextResponse.json({ error: "DB_FAILED", detail: bErr.message }, { status: 500 });
+    biome = biomeRow as unknown as { id: string; tileset_url: string | null; tileset_metadata: unknown };
+  }
 
   // Hydrate NPCs.
-  let npcs: Array<{
+  const npcIds = npcRowsByRoom.map((r) => r.npc_id as string);
+  type RoomNpcOut = {
     id: string;
     name: string;
     title: string | null;
     portrait_url: string | null;
+    sprite_atlas: Record<string, string> | null;
+    tile_x: number | null;
+    tile_y: number | null;
     has_unmet_first_dialogue: boolean;
     name_localized: string;
     title_localized: string | null;
-  }> = [];
+  };
+  let npcs: RoomNpcOut[] = [];
   if (npcIds.length > 0) {
     const [npcRowsRes, metRes] = await Promise.all([
       supabase
         .from("npcs")
-        .select("id, name, title, portrait_url")
+        .select("id, name, title, portrait_url, sprite_atlas")
         .in("id", npcIds),
       supabase
         .from("character_npc_meets")
@@ -121,13 +146,25 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       }
     }
 
+    const placementByNpc = new Map<string, { tile_x: number | null; tile_y: number | null }>();
+    for (const row of npcRowsByRoom) {
+      placementByNpc.set(row.npc_id as string, {
+        tile_x: (row.tile_x as number | null) ?? null,
+        tile_y: (row.tile_y as number | null) ?? null,
+      });
+    }
+
     npcs = npcRows.map((n) => {
       const tr = tRows.get(n.id as string) ?? {};
+      const placement = placementByNpc.get(n.id as string) ?? { tile_x: null, tile_y: null };
       return {
         id: n.id as string,
         name: n.name as string,
         title: (n.title as string | null) ?? null,
         portrait_url: (n.portrait_url as string | null) ?? null,
+        sprite_atlas: (n.sprite_atlas as Record<string, string> | null) ?? null,
+        tile_x: placement.tile_x,
+        tile_y: placement.tile_y,
         has_unmet_first_dialogue: !metSet.has(n.id as string),
         name_localized: tr.name ?? (n.name as string),
         title_localized: tr.title ?? (n.title as string | null) ?? null,
@@ -135,7 +172,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     });
   }
 
-  // Translate room name + description.
   let roomNameLocalized = room.name as string;
   let roomDescLocalized = (room.description as string | null) ?? null;
   if (locale !== "en") {
@@ -151,7 +187,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
   }
 
-  // Mark visit (idempotent: insert if missing, else bump last_visited_at).
   await supabase
     .from("character_room_visits")
     .upsert(
@@ -176,6 +211,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         name_localized: roomNameLocalized,
         description: room.description,
         description_localized: roomDescLocalized,
+        tilemap_data: room.tilemap_data,
+      },
+      biome,
+      player: {
+        class_id: klass.id,
+        sprite_atlas: (klass.sprite_atlas as Record<string, string> | null) ?? null,
+        portrait_url: (klass.portrait_url as string | null) ?? null,
       },
       connections: connections.map((c) => ({
         direction: c.direction,
