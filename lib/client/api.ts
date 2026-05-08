@@ -128,12 +128,20 @@ export type Direction = "north" | "south" | "east" | "west";
 
 export type SpriteAtlas = Partial<Record<Direction, string>>;
 
+/**
+ * Per-animation, per-direction frame URL list. PixelLab walk + idle each
+ * yield 4 frames per direction. Phaser composes one Phaser.Animation per
+ * (animation × direction) and switches based on movement state.
+ */
+export type AnimationAtlas = Partial<Record<"walk" | "idle", Partial<Record<Direction, string[]>>>>;
+
 export type RoomNpc = {
   id: string;
   name: string;
   title: string | null;
   portrait_url: string | null;
   sprite_atlas: SpriteAtlas | null;
+  animation_atlas: AnimationAtlas | null;
   tile_x: number | null;
   tile_y: number | null;
   has_unmet_first_dialogue: boolean;
@@ -206,6 +214,7 @@ export type RoomState = {
   player: {
     class_id: string;
     sprite_atlas: SpriteAtlas | null;
+    animation_atlas: AnimationAtlas | null;
     portrait_url: string | null;
   };
   connections: RoomConnectionRow[];

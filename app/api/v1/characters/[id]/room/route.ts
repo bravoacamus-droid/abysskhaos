@@ -73,7 +73,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       .eq("room_id", roomId),
     supabase
       .from("classes")
-      .select("id, name, sprite_atlas, portrait_url")
+      .select("id, name, sprite_atlas, animation_atlas, portrait_url")
       .eq("id", character.class_id)
       .single(),
   ]);
@@ -108,6 +108,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     title: string | null;
     portrait_url: string | null;
     sprite_atlas: Record<string, string> | null;
+    animation_atlas: Record<string, Record<string, string[]>> | null;
     tile_x: number | null;
     tile_y: number | null;
     has_unmet_first_dialogue: boolean;
@@ -119,7 +120,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const [npcRowsRes, metRes] = await Promise.all([
       supabase
         .from("npcs")
-        .select("id, name, title, portrait_url, sprite_atlas")
+        .select("id, name, title, portrait_url, sprite_atlas, animation_atlas")
         .in("id", npcIds),
       supabase
         .from("character_npc_meets")
@@ -163,6 +164,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         title: (n.title as string | null) ?? null,
         portrait_url: (n.portrait_url as string | null) ?? null,
         sprite_atlas: (n.sprite_atlas as Record<string, string> | null) ?? null,
+        animation_atlas:
+          (n.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
         tile_x: placement.tile_x,
         tile_y: placement.tile_y,
         has_unmet_first_dialogue: !metSet.has(n.id as string),
@@ -217,6 +220,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       player: {
         class_id: klass.id,
         sprite_atlas: (klass.sprite_atlas as Record<string, string> | null) ?? null,
+        animation_atlas:
+          (klass.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
         portrait_url: (klass.portrait_url as string | null) ?? null,
       },
       connections: connections.map((c) => ({

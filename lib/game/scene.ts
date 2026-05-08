@@ -17,7 +17,7 @@
 
 import Phaser from "phaser";
 
-import type { Direction, RoomState } from "@/lib/client/api";
+import type { AnimationAtlas, Direction, RoomState } from "@/lib/client/api";
 import { buildTileIndexGrid, isWallCell } from "./wang";
 
 export const TILE_SIZE = 16;
@@ -33,6 +33,15 @@ const TURN_COOLDOWN_MS = 80;
  * line with Pokemon / Chrono Trigger overworld proportions.
  */
 const CHARACTER_SCALE = 1;
+/**
+ * Frames-per-second for walk + idle. PixelLab walk-4-frames animations
+ * read naturally around 8fps (matches the 4-frame leg cycle felt in
+ * Pokemon / Chrono Trigger overworld). Idle breathing is slower visually
+ * but using the same FPS keeps the loop tight against the grid step.
+ */
+const ANIM_FRAMERATE = 8;
+const ALL_DIRECTIONS: Direction[] = ["south", "north", "east", "west"];
+type AnimState = "walk" | "idle";
 
 export type SceneCallbacks = {
   onExitRequested?: (direction: Direction) => void;
@@ -54,6 +63,7 @@ export class AbyssScene extends Phaser.Scene {
   private moveCooldownMs = 0;
   private adjacentNpcId: string | null = null;
   private virtualDir: Direction | null = null;
+  private playerAnimState: AnimState = "idle";
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
   private booted = false;
@@ -127,7 +137,7 @@ export class AbyssScene extends Phaser.Scene {
     }
 
     if (s.player.sprite_atlas) {
-      for (const dir of ["south", "north", "east", "west"] as const) {
+      for (const dir of ALL_DIRECTIONS) {
         const url = s.player.sprite_atlas[dir];
         const key = `player-${dir}`;
         if (url && !this.textures.exists(key)) {
@@ -135,17 +145,82 @@ export class AbyssScene extends Phaser.Scene {
         }
       }
     }
+    this.queueAnimationAssets("player", s.player.animation_atlas ?? null);
 
     for (const npc of s.npcs) {
-      if (!npc.sprite_atlas) continue;
-      for (const dir of ["south", "north", "east", "west"] as const) {
-        const url = npc.sprite_atlas[dir];
-        const key = `npc-${npc.id}-${dir}`;
-        if (url && !this.textures.exists(key)) {
-          this.load.image(key, url);
+      if (npc.sprite_atlas) {
+        for (const dir of ALL_DIRECTIONS) {
+          const url = npc.sprite_atlas[dir];
+          const key = `npc-${npc.id}-${dir}`;
+          if (url && !this.textures.exists(key)) {
+            this.load.image(key, url);
+          }
         }
       }
+      this.queueAnimationAssets(`npc-${npc.id}`, npc.animation_atlas ?? null);
     }
+  }
+
+  private queueAnimationAssets(prefix: string, atlas: AnimationAtlas | null) {
+    if (!atlas) return;
+    for (const animName of ["walk", "idle"] as const) {
+      const dirMap = atlas[animName];
+      if (!dirMap) continue;
+      for (const dir of ALL_DIRECTIONS) {
+        const urls = dirMap[dir];
+        if (!urls) continue;
+        urls.forEach((url, i) => {
+          const key = `${prefix}-${animName}-${dir}-${i}`;
+          if (url && !this.textures.exists(key)) {
+            this.load.image(key, url);
+          }
+        });
+      }
+    }
+  }
+
+  /**
+   * Register Phaser.Animation entries for each (animName × direction)
+   * combination present in the atlas. Frame keys must match what
+   * `queueAnimationAssets` loaded. Idempotent — re-registers only if
+   * not already created.
+   */
+  private createAnimationsFor(prefix: string, atlas: AnimationAtlas | null) {
+    if (!atlas) return;
+    for (const animName of ["walk", "idle"] as const) {
+      const dirMap = atlas[animName];
+      if (!dirMap) continue;
+      for (const dir of ALL_DIRECTIONS) {
+        const urls = dirMap[dir];
+        if (!urls || urls.length === 0) continue;
+        const animKey = `${prefix}-${animName}-${dir}`;
+        if (this.anims.exists(animKey)) continue;
+        const frames = urls
+          .map((_, i) => `${prefix}-${animName}-${dir}-${i}`)
+          .filter((k) => this.textures.exists(k))
+          .map((key) => ({ key }));
+        if (frames.length === 0) continue;
+        this.anims.create({
+          key: animKey,
+          frames,
+          frameRate: ANIM_FRAMERATE,
+          repeat: -1,
+        });
+      }
+    }
+  }
+
+  private playSpriteAnim(
+    sprite: Phaser.GameObjects.Sprite,
+    prefix: string,
+    state: AnimState,
+    dir: Direction,
+  ): boolean {
+    const animKey = `${prefix}-${state}-${dir}`;
+    if (!this.anims.exists(animKey)) return false;
+    if (sprite.anims.currentAnim?.key === animKey && sprite.anims.isPlaying) return true;
+    sprite.play(animKey);
+    return true;
   }
 
   private tearDownRoom() {
@@ -197,6 +272,8 @@ export class AbyssScene extends Phaser.Scene {
 
     this.playerTile = { ...map.spawn };
     this.playerDir = "south";
+    this.playerAnimState = "idle";
+    this.createAnimationsFor("player", s.player.animation_atlas ?? null);
     const playerKey = this.spriteKeyForDir("player", this.playerDir);
     if (this.textures.exists(playerKey)) {
       this.player = this.add.sprite(
@@ -207,11 +284,16 @@ export class AbyssScene extends Phaser.Scene {
       this.player.setScale(CHARACTER_SCALE);
       this.player.setOrigin(0.5, 0.75);
       this.player.setDepth(10);
+      // Kick the idle loop immediately if frames are present; otherwise the
+      // static rotation texture set above is the fallback.
+      this.playSpriteAnim(this.player, "player", "idle", this.playerDir);
     }
 
     for (const npc of s.npcs) {
       if (npc.tile_x === null || npc.tile_y === null) continue;
-      const key = `npc-${npc.id}-south`;
+      const prefix = `npc-${npc.id}`;
+      this.createAnimationsFor(prefix, npc.animation_atlas ?? null);
+      const key = `${prefix}-south`;
       if (!this.textures.exists(key)) continue;
       const sprite = this.add.sprite(
         npc.tile_x * RENDERED_TILE + RENDERED_TILE / 2,
@@ -222,6 +304,7 @@ export class AbyssScene extends Phaser.Scene {
       sprite.setOrigin(0.5, 0.75);
       sprite.setDepth(5);
       this.npcSprites.set(npc.id, sprite);
+      this.playSpriteAnim(sprite, prefix, "idle", "south");
     }
 
     this.adjacentNpcId = null;
@@ -241,7 +324,14 @@ export class AbyssScene extends Phaser.Scene {
       else if (this.cursors.right.isDown || this.wasd?.D.isDown) dir = "east";
     }
 
-    if (dir) this.attemptMove(dir);
+    if (dir) {
+      this.attemptMove(dir);
+    } else if (this.playerAnimState !== "idle") {
+      // No movement input + cooldown done → drop back to idle. We only
+      // touch the anim state when transitioning so we don't restart an
+      // already-looping idle every frame.
+      this.setPlayerAnimState("idle");
+    }
   }
 
   /** Public hook the React D-pad calls. Set the desired direction;
@@ -264,8 +354,19 @@ export class AbyssScene extends Phaser.Scene {
   private setPlayerFacing(dir: Direction) {
     if (this.playerDir === dir || !this.player) return;
     this.playerDir = dir;
-    const key = this.spriteKeyForDir("player", dir);
-    if (this.textures.exists(key)) this.player.setTexture(key);
+    const animPlayed = this.playSpriteAnim(this.player, "player", this.playerAnimState, dir);
+    if (!animPlayed) {
+      // Fallback: no animation registered for this direction → swap the
+      // static rotation texture so the player at least faces the new way.
+      const key = this.spriteKeyForDir("player", dir);
+      if (this.textures.exists(key)) this.player.setTexture(key);
+    }
+  }
+
+  private setPlayerAnimState(state: AnimState) {
+    if (this.playerAnimState === state || !this.player) return;
+    this.playerAnimState = state;
+    this.playSpriteAnim(this.player, "player", state, this.playerDir);
   }
 
   private attemptMove(dir: Direction) {
@@ -294,9 +395,11 @@ export class AbyssScene extends Phaser.Scene {
       }
     }
 
-    // Wall — already turned, just absorb the cooldown.
+    // Wall — already turned. Bumping into a wall is "not moving"; let the
+    // sprite settle into idle so we don't show a walk cycle while stuck.
     if (isWallCell(map, nx, ny)) {
       this.moveCooldownMs = TURN_COOLDOWN_MS;
+      this.setPlayerAnimState("idle");
       return;
     }
 
@@ -306,6 +409,7 @@ export class AbyssScene extends Phaser.Scene {
       this.player.x = nx * RENDERED_TILE + RENDERED_TILE / 2;
       this.player.y = ny * RENDERED_TILE + RENDERED_TILE / 2;
     }
+    this.setPlayerAnimState("walk");
     this.moveCooldownMs = MOVE_COOLDOWN_MS;
     this.checkNpcAdjacency();
   }
