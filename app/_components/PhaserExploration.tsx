@@ -70,7 +70,20 @@ export default function PhaserExploration({
         const { AbyssScene } = sceneMod;
 
         if (cancelled) return;
-        const scene = new AbyssScene();
+
+        const callbacks = {
+          onExitRequested: (direction: Direction) => {
+            if (cancelled) return;
+            void doMove(direction);
+          },
+          onNpcAdjacent: (npcId: string | null) => {
+            if (cancelled) return;
+            const cur = stateRef.current;
+            const npc =
+              cur && npcId ? cur.npcs.find((n) => n.id === npcId) ?? null : null;
+            setAdjacentNpc(npc);
+          },
+        };
 
         const game = new Phaser.Game({
           type: Phaser.AUTO,
@@ -86,22 +99,18 @@ export default function PhaserExploration({
             height: 256,
           },
           scene: [],
+          autoFocus: false,
         });
         gameRef.current = game;
-        game.scene.add(AbyssScene.KEY, scene);
-        game.scene.start(AbyssScene.KEY, { state: initial });
-        sceneRef.current = scene;
 
-        scene.events.on("exit-requested", (data: { direction: Direction }) => {
-          if (cancelled) return;
-          void doMove(data.direction);
-        });
-        scene.events.on("npc-adjacent", (data: { npcId: string | null }) => {
-          if (cancelled) return;
-          const cur = stateRef.current;
-          const npc = cur && data.npcId ? cur.npcs.find((n) => n.id === data.npcId) ?? null : null;
-          setAdjacentNpc(npc);
-        });
+        // Add scene + auto-start with init data (state + callbacks). This is
+        // the only place that handles startup, so events emitter timing
+        // is irrelevant — the scene calls our callbacks directly.
+        const scene = game.scene.add(AbyssScene.KEY, AbyssScene, true, {
+          state: initial,
+          callbacks,
+        }) as InstanceType<typeof AbyssScene>;
+        sceneRef.current = scene;
       } catch (err) {
         if (!cancelled) setError(humanize(err, locale));
       }

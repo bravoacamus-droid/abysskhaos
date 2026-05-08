@@ -22,6 +22,12 @@ import type { TilemapData, WangTileMeta, WangTilesetMeta } from "@/lib/client/ap
 
 export type Terrain = "upper" | "lower";
 
+/** PixelLab MCP returns tile array under `tileset_data.tiles`. Be lenient
+ *  to either shape so we don't break if the API changes. */
+function tilesOf(meta: WangTilesetMeta): WangTileMeta[] {
+  return meta.tileset_data?.tiles ?? meta.tiles ?? [];
+}
+
 /** Build the (W+1)×(H+1) vertex grid from a room's tilemap. */
 export function buildVertexGrid(map: TilemapData): Terrain[][] {
   const W = map.width;
@@ -52,7 +58,7 @@ function findTileByCorners(
   SW: Terrain,
   SE: Terrain,
 ): WangTileMeta | null {
-  for (const tile of meta.tiles) {
+  for (const tile of tilesOf(meta)) {
     if (
       tile.corners.NW === NW &&
       tile.corners.NE === NE &&
@@ -92,8 +98,14 @@ export function buildTileIndexGrid(
   const verts = buildVertexGrid(map);
   const imageWidthPx = meta.tileset_image.dimensions.width;
 
+  const allTiles = tilesOf(meta);
+  if (allTiles.length === 0) {
+    // No tiles in the metadata — return a blank grid rather than throw,
+    // so Phaser still produces a (visually wrong but non-crashing) layer.
+    return Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
+  }
   const fallbackTile =
-    findTileByCorners(meta, "lower", "lower", "lower", "lower") ?? meta.tiles[0]!;
+    findTileByCorners(meta, "lower", "lower", "lower", "lower") ?? allTiles[0]!;
   const fallbackIdx = tileIndexFromBox(fallbackTile.bounding_box, imageWidthPx);
 
   const out: number[][] = [];

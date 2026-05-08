@@ -168,10 +168,20 @@ export type WangTileMeta = {
   bounding_box: { x: number; y: number; width: number; height: number };
 };
 
+/**
+ * The actual shape returned by PixelLab's MCP /metadata endpoint. The
+ * tile array lives under `tileset_data.tiles`, not at the root — their
+ * documented JSON example flattens it for clarity. Keep both possible
+ * locations here so consumers can be lenient.
+ */
 export type WangTilesetMeta = {
   format: string;
-  tiles: WangTileMeta[];
   tileset_image: { filename: string; dimensions: { width: number; height: number } };
+  tile_size?: { width: number; height: number };
+  /** Modern shape from MCP metadata. */
+  tileset_data?: { tiles: WangTileMeta[] };
+  /** Legacy shape (and for hand-authored tilesets). */
+  tiles?: WangTileMeta[];
 };
 
 export type RoomState = {
