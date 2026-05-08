@@ -42,11 +42,6 @@ export default function PhaserExploration({
   const [adjacentNpc, setAdjacentNpc] = useState<RoomNpc | null>(null);
   const [activeNpc, setActiveNpc] = useState<RoomNpc | null>(null);
   const [moving, setMoving] = useState(false);
-  // Temporary instrumentation while we hunt down "D-pad clicks but nothing
-  // happens" on the live Telegram WebView. Each press updates this string;
-  // a small HUD renders it on top of the canvas. Strip after the input
-  // chain is verified end-to-end.
-  const [debugTrace, setDebugTrace] = useState<string>("idle");
 
   // Boot Phaser once. doMove is captured via closure → fine to skip dep.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,17 +170,7 @@ export default function PhaserExploration({
   }
 
   function dpadPress(direction: Direction) {
-    const scene = sceneRef.current as
-      | {
-          pressDirectionOnce?: (d: Direction) => void;
-        }
-      | null;
-    const sceneOk = !!scene && typeof scene.pressDirectionOnce === "function";
-    const stamp = new Date().toISOString().slice(11, 19);
-    setDebugTrace(`press ${direction} @ ${stamp} · scene:${sceneOk ? "ok" : "missing"}`);
-    if (typeof window !== "undefined") {
-      console.log("[abyss/dpad]", { direction, sceneOk, sceneRefType: typeof scene });
-    }
+    const scene = sceneRef.current as { pressDirectionOnce?: (d: Direction) => void } | null;
     scene?.pressDirectionOnce?.(direction);
   }
 
@@ -275,12 +260,6 @@ export default function PhaserExploration({
           <DPad onPress={dpadPress} onHold={dpadHold} disabled={moving} />
         </div>
 
-        {/* TEMP: visible input trace so we can see press events without the
-            console. Strip when the D-pad chain is confirmed end-to-end. */}
-        <div className="pointer-events-none absolute left-2 top-2 z-40 rounded bg-abyss-void/80 px-2 py-1 font-mono text-[9px] text-abyss-soul">
-          {debugTrace}
-        </div>
-
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center bg-abyss-void/80 p-6 text-center">
             <p className="text-sm text-abyss-ember">{error}</p>
@@ -316,6 +295,21 @@ export default function PhaserExploration({
   );
 }
 
+/**
+ * `LONG_PRESS_DELAY_MS` is the threshold below which a button release counts
+ * as a "tap" — that means a single grid step. Holding past this threshold
+ * activates the continuous-walk virtual direction, which the Phaser update
+ * loop polls every frame.
+ *
+ * Why split the two: when both happened on every press, a long-ish tap
+ * (~200ms — typical on touchscreens) produced two moves. The press fired
+ * one step + set the virtual direction, then the next update tick after
+ * the cooldown picked up the still-set virtual direction and stepped
+ * again. Splitting the modes by press duration makes the behaviour
+ * deterministic regardless of how long the user holds.
+ */
+const LONG_PRESS_DELAY_MS = 250;
+
 function DPad({
   onPress,
   onHold,
@@ -331,6 +325,29 @@ function DPad({
     { id: "east", row: 2, col: 3, arrow: "→" },
     { id: "south", row: 3, col: 2, arrow: "↓" },
   ];
+  // One timer per button instance so quick-fire taps don't fight each other.
+  const holdTimeouts = useRef<Map<Direction, ReturnType<typeof setTimeout>>>(new Map());
+
+  function startPress(direction: Direction) {
+    if (disabled) return;
+    onPress(direction);
+    const existing = holdTimeouts.current.get(direction);
+    if (existing) clearTimeout(existing);
+    holdTimeouts.current.set(
+      direction,
+      setTimeout(() => onHold(direction), LONG_PRESS_DELAY_MS),
+    );
+  }
+
+  function endPress(direction: Direction) {
+    const existing = holdTimeouts.current.get(direction);
+    if (existing) {
+      clearTimeout(existing);
+      holdTimeouts.current.delete(direction);
+    }
+    onHold(null);
+  }
+
   return (
     <div className="grid grid-cols-3 grid-rows-3 gap-1 w-[160px] select-none">
       {dirs.map((d) => (
@@ -339,28 +356,24 @@ function DPad({
           type="button"
           disabled={disabled}
           onPointerDown={(e) => {
-            if (disabled) return;
             e.preventDefault();
             e.stopPropagation();
-            onPress(d.id);
-            onHold(d.id);
+            startPress(d.id);
           }}
           onPointerUp={(e) => {
             e.stopPropagation();
-            onHold(null);
+            endPress(d.id);
           }}
-          onPointerLeave={() => onHold(null)}
-          onPointerCancel={() => onHold(null)}
+          onPointerLeave={() => endPress(d.id)}
+          onPointerCancel={() => endPress(d.id)}
           // Older mobile browsers (some Telegram WebViews) deliver touchstart
           // before pointerdown is normalised — handle both so the input is
           // never swallowed by a sibling.
           onTouchStart={(e) => {
-            if (disabled) return;
             e.stopPropagation();
-            onPress(d.id);
-            onHold(d.id);
+            startPress(d.id);
           }}
-          onTouchEnd={() => onHold(null)}
+          onTouchEnd={() => endPress(d.id)}
           style={{ gridRow: d.row, gridColumn: d.col, touchAction: "none" }}
           className="h-12 w-12 rounded-md border border-abyss-coal/80 bg-abyss-deep/95 text-lg text-abyss-mist shadow-md backdrop-blur transition active:bg-abyss-khaos/40 active:text-white disabled:opacity-50"
         >
