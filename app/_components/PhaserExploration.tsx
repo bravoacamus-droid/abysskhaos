@@ -165,7 +165,10 @@ export default function PhaserExploration({
         </span>
       </div>
 
-      <div className="relative aspect-[5/4] w-full overflow-hidden rounded-lg border border-abyss-coal/80 bg-abyss-void">
+      <div
+        className="relative w-full overflow-hidden rounded-lg border border-abyss-coal/80 bg-abyss-void"
+        style={{ height: "calc(100dvh - 220px)", maxHeight: "560px", minHeight: "320px" }}
+      >
         <div ref={containerRef} className="absolute inset-0" />
 
         {showBanner && state ? (
@@ -183,6 +186,39 @@ export default function PhaserExploration({
           </div>
         ) : null}
 
+        {/* NPC adjacent CTA — overlays the canvas at top-left when available */}
+        {adjacentNpc ? (
+          <button
+            type="button"
+            onClick={() => setActiveNpc(adjacentNpc)}
+            className="absolute left-2 right-2 top-2 flex items-center gap-2 rounded-md border border-abyss-soul/70 bg-abyss-deep/95 p-2 text-left shadow-lg backdrop-blur sm:left-auto sm:right-2 sm:max-w-[220px]"
+          >
+            {adjacentNpc.portrait_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={adjacentNpc.portrait_url}
+                alt={adjacentNpc.name_localized}
+                width={32}
+                height={32}
+                className="h-8 w-8 shrink-0 rounded bg-abyss-void object-contain"
+                style={{ imageRendering: "pixelated" }}
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-white">{adjacentNpc.name_localized}</p>
+              <p className="text-[9px] uppercase tracking-widest text-abyss-soul">
+                {t(locale, "exploration.talk_prompt")}
+              </p>
+            </div>
+            <span className="text-abyss-soul">›</span>
+          </button>
+        ) : null}
+
+        {/* D-pad pinned to bottom-right of the canvas as a HUD overlay */}
+        <div className="absolute bottom-2 right-2">
+          <DPad onPress={dpadPress} onHold={dpadHold} disabled={moving} />
+        </div>
+
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center bg-abyss-void/80 p-6 text-center">
             <p className="text-sm text-abyss-ember">{error}</p>
@@ -191,39 +227,10 @@ export default function PhaserExploration({
       </div>
 
       {state?.room.description_localized ? (
-        <p className="text-xs leading-relaxed text-abyss-mist">
+        <p className="text-[11px] leading-relaxed text-abyss-mist">
           {state.room.description_localized}
         </p>
       ) : null}
-
-      {adjacentNpc ? (
-        <button
-          type="button"
-          onClick={() => setActiveNpc(adjacentNpc)}
-          className="flex w-full items-center gap-3 rounded-lg border border-abyss-soul/60 bg-abyss-deep p-3 text-left transition hover:border-abyss-soul"
-        >
-          {adjacentNpc.portrait_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={adjacentNpc.portrait_url}
-              alt={adjacentNpc.name_localized}
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0 rounded bg-abyss-void object-contain"
-              style={{ imageRendering: "pixelated" }}
-            />
-          ) : null}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{adjacentNpc.name_localized}</p>
-            <p className="text-[10px] uppercase tracking-widest text-abyss-soul">
-              {t(locale, "exploration.talk_prompt")}
-            </p>
-          </div>
-          <span className="text-abyss-soul">›</span>
-        </button>
-      ) : null}
-
-      <DPad onPress={dpadPress} onHold={dpadHold} disabled={moving} />
 
       {activeNpc ? (
         <DialogueModal
@@ -263,22 +270,23 @@ function DPad({
     { id: "south", row: 3, col: 2, arrow: "↓" },
   ];
   return (
-    <div className="grid grid-cols-3 grid-rows-3 gap-1.5 max-w-[260px] mx-auto">
+    <div className="grid grid-cols-3 grid-rows-3 gap-1 w-[136px] select-none">
       {dirs.map((d) => (
         <button
           key={d.id}
           type="button"
           disabled={disabled}
-          onPointerDown={() => {
+          onPointerDown={(e) => {
             if (disabled) return;
+            e.preventDefault();
             onPress(d.id);
             onHold(d.id);
           }}
           onPointerUp={() => onHold(null)}
           onPointerLeave={() => onHold(null)}
           onPointerCancel={() => onHold(null)}
-          style={{ gridRow: d.row, gridColumn: d.col }}
-          className="rounded-md border border-abyss-coal/80 bg-abyss-deep py-3 text-lg text-abyss-mist transition active:bg-abyss-khaos/30 active:text-white disabled:opacity-50"
+          style={{ gridRow: d.row, gridColumn: d.col, touchAction: "none" }}
+          className="h-10 w-10 rounded-md border border-abyss-coal/80 bg-abyss-deep/95 text-base text-abyss-mist shadow-md backdrop-blur transition active:bg-abyss-khaos/40 active:text-white disabled:opacity-50"
         >
           {d.arrow}
         </button>

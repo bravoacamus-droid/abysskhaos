@@ -25,6 +25,14 @@ export const ZOOM = 2;
 const RENDERED_TILE = TILE_SIZE * ZOOM;
 const MOVE_COOLDOWN_MS = 180;
 const TURN_COOLDOWN_MS = 80;
+/**
+ * Character canvases come back from PixelLab at 68×68 (with the actual
+ * character ~40px tall, padded for animations). At ZOOM scale that would
+ * be 2.5 tiles tall — way too dominant for top-down RPG aesthetic. We
+ * keep characters at 1× display so they sit at ~40px ≈ 1.25 tiles, in
+ * line with Pokemon / Chrono Trigger overworld proportions.
+ */
+const CHARACTER_SCALE = 1;
 
 export type SceneEvents = {
   "npc-adjacent": (data: { npcId: string | null }) => void;
@@ -127,7 +135,10 @@ export class AbyssScene extends Phaser.Scene {
         this.playerTile.y * RENDERED_TILE + RENDERED_TILE / 2,
         playerKey,
       );
-      this.player.setScale(ZOOM);
+      this.player.setScale(CHARACTER_SCALE);
+      // Anchor the sprite by feet so taller characters appear to stand on
+      // the tile rather than be centered through it.
+      this.player.setOrigin(0.5, 0.75);
       this.player.setDepth(10);
     }
 
@@ -141,7 +152,8 @@ export class AbyssScene extends Phaser.Scene {
         npc.tile_y * RENDERED_TILE + RENDERED_TILE / 2,
         key,
       );
-      sprite.setScale(ZOOM);
+      sprite.setScale(CHARACTER_SCALE);
+      sprite.setOrigin(0.5, 0.75);
       sprite.setDepth(5);
       this.npcSprites.set(npc.id, sprite);
     }
