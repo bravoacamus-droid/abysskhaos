@@ -192,12 +192,13 @@ export default function PhaserExploration({
         className="relative w-full overflow-hidden rounded-lg border border-abyss-coal/80 bg-abyss-void"
         style={{ height: "calc(100dvh - 220px)", maxHeight: "560px", minHeight: "320px" }}
       >
-        {/* Phaser canvas. pointer-events:none lets touches/clicks fall
-            through to the D-pad and NPC CTA overlays sitting in front of
-            it. Phaser's keyboard input is on `document`, not on the
-            canvas, so arrow / WASD movement still works on desktop. */}
+        {/* Phaser canvas. pointer-events:none on the wrapper + the
+            data-attribute selector in globals.css make sure the <canvas>
+            Phaser injects also inherits pointer-events:none. Without the
+            CSS override the canvas was intercepting taps on the D-pad. */}
         <div
           ref={containerRef}
+          data-phaser-canvas-host=""
           className="absolute inset-0"
           style={{ pointerEvents: "none" }}
         />

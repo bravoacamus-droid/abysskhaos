@@ -24,3 +24,12 @@ body {
   height: 100dvh;
   overflow: hidden;
 }
+
+/* Phaser injects its own <canvas> inside the wrapper div the React
+   component owns. We set pointer-events:none on the wrapper so taps fall
+   through to the D-pad / NPC CTA overlays sitting on top, but the
+   canvas Phaser injects inherits its own user-agent default and can
+   end up intercepting input on some browsers. Force it down explicitly. */
+[data-phaser-canvas-host] canvas {
+  pointer-events: none !important;
+}
