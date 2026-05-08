@@ -13,9 +13,9 @@ import {
 import { CANONICAL_LOCALE, isSupportedLocale, pickLocale, t, type Locale } from "@/lib/i18n";
 
 import CharacterCreate from "./CharacterCreate";
-import Exploration from "./Exploration";
 import Hub from "./Hub";
 import LanguageSwitcher from "./LanguageSwitcher";
+import PhaserExploration from "./PhaserExploration";
 import SlotPicker from "./SlotPicker";
 
 const LOCALE_STORAGE_KEY = "abyss.locale";
@@ -191,7 +191,7 @@ export default function GameShell() {
 
       {state.status === "hub" && activeCharacter ? (
         state.mode === "exploration" ? (
-          <Exploration
+          <PhaserExploration
             initData={initData!}
             characterId={activeCharacter.id}
             characterName={activeCharacter.name}
