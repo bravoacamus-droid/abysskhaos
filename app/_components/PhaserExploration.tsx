@@ -113,14 +113,35 @@ export default function PhaserExploration({
         });
         gameRef.current = game;
 
-        // Add scene + auto-start with init data (state + callbacks). This is
-        // the only place that handles startup, so events emitter timing
-        // is irrelevant — the scene calls our callbacks directly.
-        const scene = game.scene.add(AbyssScene.KEY, AbyssScene, true, {
+        // Add the scene with autoStart so init() runs with our state +
+        // callbacks. `add()` can return null in Phaser 4 when the manager
+        // hasn't finished booting yet, so we don't trust its return value:
+        // we poll `getScene(KEY)` until the instance is available, then
+        // store it in the ref. The user reported `sceneRefType: 'object'`
+        // with `sceneOk: false`, which is `typeof null === 'object'` — i.e.
+        // we were caching the null that `add()` handed back.
+        game.scene.add(AbyssScene.KEY, AbyssScene, true, {
           state: initial,
           callbacks,
-        }) as InstanceType<typeof AbyssScene>;
-        sceneRef.current = scene;
+        });
+
+        const attachScene = (attempt = 0) => {
+          if (cancelled) return;
+          const live = game.scene.getScene(AbyssScene.KEY) as
+            | InstanceType<typeof AbyssScene>
+            | null;
+          if (live && typeof live.pressDirectionOnce === "function") {
+            sceneRef.current = live;
+            console.log("[abyss/boot] scene attached", { attempt });
+            return;
+          }
+          if (attempt >= 50) {
+            console.warn("[abyss/boot] scene never appeared after 50 retries");
+            return;
+          }
+          setTimeout(() => attachScene(attempt + 1), 30);
+        };
+        attachScene();
       } catch (err) {
         if (!cancelled) setError(humanize(err, locale));
       }
