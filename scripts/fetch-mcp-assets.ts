@@ -78,11 +78,11 @@ const JOBS: Array<CharacterJob | TilesetJob> = [
   },
   {
     kind: "tileset",
-    tilesetId: "b9a438b4-9aaa-4af2-b993-33f1b7f20b37",
+    tilesetId: "9d7535bf-4dfb-4ded-beef-2ff7003475dd",
     biomeId: "threshold",
-    label: "Threshold biome Wang tileset",
+    label: "Threshold biome Wang tileset v2 (lit floor / dark walls)",
     prompt:
-      "Wang tileset 16 tiles, dark obsidian floor with violet bioluminescent veins → black volcanic stone walls",
+      "Wang tileset 16 tiles, glowing violet abyssal floor with bright bioluminescent veins (lower terrain — walkable) → dark obsidian volcanic walls (upper terrain), high top-down, highly detailed",
   },
 ];
 

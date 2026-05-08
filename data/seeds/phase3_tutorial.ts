@@ -133,97 +133,122 @@ type TilemapData = {
 };
 
 const TILEMAPS: Record<string, TilemapData> = {
-  // The Crossing — main hub, Cedric stands near the anvil at the north
+  // The Crossing — main hub. Circular feel with pillars framing the anvil
+  // at center; Cedric stands one tile south of the anvil.
   f100_r01: {
-    width: 9,
-    height: 7,
+    width: 13,
+    height: 11,
     tiles: [
-      "####.####", // row 0 — north wall with center exit at x=4
-      "#.......#",
-      "#.......#",
-      "#.......#",
-      "#.......#",
-      "#.......#",
-      "#########",
+      "####.....####", // exit north @ (6,0)
+      "##.........##",
+      "#...........#",
+      "#...........#",
+      "#....###....#",
+      "#....#.#....#", // anvil sits at (6, 5)
+      "#....###....#",
+      "#...........#",
+      "#...........#",
+      "##.........##",
+      "#############",
     ],
-    spawn: { x: 4, y: 5 },
-    exits: { north: { x: 4, y: 0 } },
-    props: [{ kind: "anvil", x: 4, y: 1 }],
+    spawn: { x: 6, y: 8 },
+    exits: { north: { x: 6, y: 0 } },
+    props: [{ kind: "anvil", x: 6, y: 5 }],
   },
-  // The Awakening — narrow north-south corridor
+  // The Awakening — long corridor with antechambers on each side. The
+  // walls 'bulge' outward in the middle so the player feels the passage
+  // is leading them somewhere rather than just a straight tube.
   f100_r02: {
-    width: 5,
-    height: 8,
+    width: 13,
+    height: 11,
     tiles: [
-      "##.##",
-      "#...#",
-      "#...#",
-      "#...#",
-      "#...#",
-      "#...#",
-      "#...#",
-      "##.##",
+      "######.######",
+      "######.######",
+      "##.........##",
+      "##.........##",
+      "#...........#",
+      "#...........#",
+      "#...........#",
+      "##.........##",
+      "##.........##",
+      "######.######",
+      "######.######",
     ],
-    spawn: { x: 2, y: 6 },
-    exits: { north: { x: 2, y: 0 }, south: { x: 2, y: 7 } },
+    spawn: { x: 6, y: 9 },
+    exits: { north: { x: 6, y: 0 }, south: { x: 6, y: 10 } },
   },
-  // First Encounter — chamber with broken pillars, hostile feel
+  // First Encounter — chamber with broken pillars in a 3×3 pattern.
+  // Tighter sightlines to feel hostile.
   f100_r03: {
-    width: 9,
-    height: 7,
+    width: 13,
+    height: 11,
     tiles: [
-      "####.####",
-      "#.......#",
-      "#..#.#..#",
-      "#.......#",
-      "#..#.#..#",
-      "#.......#",
-      "####.####",
+      "######.######",
+      "#...........#",
+      "#.#..#.#..#.#",
+      "#...........#",
+      "#.#..#.#..#.#",
+      "#...........#",
+      "#.#..#.#..#.#",
+      "#...........#",
+      "#...........#",
+      "#...........#",
+      "######.######",
     ],
-    spawn: { x: 4, y: 5 },
+    spawn: { x: 6, y: 9 },
     exits: {
-      north: { x: 4, y: 0 },
-      south: { x: 4, y: 6 },
-      east: { x: 8, y: 3 },
+      north: { x: 6, y: 0 },
+      south: { x: 6, y: 10 },
+      east: { x: 12, y: 5 },
     },
   },
-  // The Cracked Steps — landing with a chest on the east wall
+  // The Cracked Steps — landing with a chest on the east wall and a
+  // crumbled bench in the south-west.
   f100_r04: {
-    width: 9,
-    height: 7,
+    width: 13,
+    height: 11,
     tiles: [
-      "####.####",
-      "#.......#",
-      "#.......#",
-      ".......##",
-      "#.......#",
-      "#.......#",
-      "####.####",
+      "######.######",
+      "#...........#",
+      "#...........#",
+      "#...........#",
+      "#...........#",
+      ".............", // exit west @ (0, 5)
+      "#...........#",
+      "#.##........#", // crumbled bench
+      "#...........#",
+      "#...........#",
+      "######.######",
     ],
-    spawn: { x: 4, y: 5 },
+    spawn: { x: 6, y: 9 },
     exits: {
-      north: { x: 4, y: 0 },
-      south: { x: 4, y: 6 },
-      west: { x: 0, y: 3 },
+      north: { x: 6, y: 0 },
+      south: { x: 6, y: 10 },
+      west: { x: 0, y: 5 },
     },
-    props: [{ kind: "chest", x: 7, y: 3 }],
+    props: [{ kind: "chest", x: 10, y: 5 }],
   },
-  // Threshold's Edge — terminal room with the spiral stair
+  // Threshold's Edge — terminal sanctum with the spiral stair central.
+  // Symmetric octagon shape so it reads as "the end".
   f100_r05: {
-    width: 7,
-    height: 7,
+    width: 13,
+    height: 11,
     tiles: [
-      "#######",
-      "#.....#",
-      "#.....#",
-      "#.....#",
-      "#.....#",
-      "#.....#",
-      "###.###",
+      "####.....####",
+      "##.........##",
+      "#...........#",
+      "#...........#",
+      "#....###....#",
+      "#....#.#....#", // spiral stair sits at (6, 5)
+      "#....###....#",
+      "#...........#",
+      "#...........#",
+      "##.........##",
+      "######.######",
     ],
-    spawn: { x: 3, y: 5 },
-    exits: { south: { x: 3, y: 6 } },
-    props: [{ kind: "spiral_stair", x: 3, y: 3 }],
+    spawn: { x: 6, y: 9 },
+    exits: { south: { x: 6, y: 10 } },
+    props: [{ kind: "spiral_stair", x: 6, y: 5 }],
   },
 };
 
@@ -232,7 +257,9 @@ const TILEMAPS: Record<string, TilemapData> = {
 // -----------------------------------------------------------------------------
 
 const NPC_PLACEMENTS: Array<{ roomSlug: string; npcId: string; tileX: number; tileY: number }> = [
-  { roomSlug: "f100_r01", npcId: "cedric_the_broken", tileX: 4, tileY: 2 },
+  // Cedric stands one tile south of the anvil at (6, 5) so the player
+  // sees him + the anvil framed together when they walk in.
+  { roomSlug: "f100_r01", npcId: "cedric_the_broken", tileX: 6, tileY: 7 },
 ];
 
 // -----------------------------------------------------------------------------
