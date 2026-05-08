@@ -135,8 +135,11 @@ export default function PhaserExploration({
       const next = await fetchRoom({ initData, characterId, locale });
       stateRef.current = next;
       setState(next);
-      const scene = sceneRef.current as { scene: { restart: (data: unknown) => void } } | null;
-      scene?.scene.restart({ state: next });
+      // Hot-reload the room without using scene.restart(), which triggers
+      // "sys null" crashes in Phaser 4. The scene keeps its callbacks
+      // (no init() re-run) and only the per-room game objects rebuild.
+      const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
+      scene?.loadRoom?.(next);
       flashBanner();
     } catch (err) {
       setError(humanize(err, locale));
@@ -146,13 +149,17 @@ export default function PhaserExploration({
   }
 
   function dpadPress(direction: Direction) {
-    const scene = sceneRef.current as { pressDirectionOnce: (d: Direction) => void } | null;
-    scene?.pressDirectionOnce(direction);
+    const scene = sceneRef.current as { pressDirectionOnce?: (d: Direction) => void } | null;
+    if (typeof window !== "undefined") {
+      // Temporary debug breadcrumb — remove once the input chain is verified.
+      console.debug("[abyss/dpad] press", direction, "scene?", !!scene);
+    }
+    scene?.pressDirectionOnce?.(direction);
   }
 
   function dpadHold(direction: Direction | null) {
-    const scene = sceneRef.current as { setVirtualDirection: (d: Direction | null) => void } | null;
-    scene?.setVirtualDirection(direction);
+    const scene = sceneRef.current as { setVirtualDirection?: (d: Direction | null) => void } | null;
+    scene?.setVirtualDirection?.(direction);
   }
 
   return (

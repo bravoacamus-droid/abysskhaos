@@ -48,6 +48,7 @@ export class AbyssScene extends Phaser.Scene {
   private callbacks: SceneCallbacks = {};
   private player?: Phaser.GameObjects.Sprite;
   private npcSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private tilemap?: Phaser.Tilemaps.Tilemap;
   private playerTile = { x: 0, y: 0 };
   private playerDir: Direction = "south";
   private moveCooldownMs = 0;
@@ -55,6 +56,7 @@ export class AbyssScene extends Phaser.Scene {
   private virtualDir: Direction | null = null;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
+  private booted = false;
 
   constructor() {
     super(AbyssScene.KEY);
@@ -68,25 +70,69 @@ export class AbyssScene extends Phaser.Scene {
   }
 
   preload() {
+    this.queueAssetsForCurrentState();
+  }
+
+  create() {
+    this.setupKeyboard();
+    this.buildRoomFromState();
+    this.booted = true;
+  }
+
+  /**
+   * Public hot-reload entrypoint called from React when the server reports a
+   * room change. Avoids `this.scene.restart(...)` because in Phaser 4 that
+   * triggers a "Cannot read properties of null (reading 'sys')" cascade when
+   * the destroy step races the next tick of the update loop. Instead we
+   * tear down + rebuild the room *in place* on the same Scene instance,
+   * keeping `this.callbacks` stable across transitions.
+   */
+  loadRoom(newState: RoomState) {
+    this.state = newState;
+    this.adjacentNpcId = null;
+    this.virtualDir = null;
+    this.moveCooldownMs = 0;
+    this.tearDownRoom();
+
+    if (!this.booted) {
+      // We're still inside the initial create(); the boot path will pick
+      // the new state up on its own.
+      return;
+    }
+
+    this.queueAssetsForCurrentState();
+    const onComplete = () => this.buildRoomFromState();
+
+    if (this.load.totalToLoad - this.load.totalComplete <= 0) {
+      onComplete();
+    } else {
+      this.load.once(Phaser.Loader.Events.COMPLETE, onComplete);
+      this.load.start();
+    }
+  }
+
+  private queueAssetsForCurrentState() {
     const s = this.state;
 
     if (s.biome?.tileset_url && s.biome.tileset_metadata) {
-      const dims = s.biome.tileset_metadata.tileset_image.dimensions;
-      // Use a unique key per biome so multiple biomes can coexist if loaded.
-      this.load.spritesheet(`tileset-${s.biome.id}`, s.biome.tileset_url, {
-        frameWidth: TILE_SIZE,
-        frameHeight: TILE_SIZE,
-        margin: 0,
-        spacing: 0,
-      });
-      // Just for clarity — log size mismatch warnings would go here.
-      void dims;
+      const key = `tileset-${s.biome.id}`;
+      if (!this.textures.exists(key)) {
+        this.load.spritesheet(key, s.biome.tileset_url, {
+          frameWidth: TILE_SIZE,
+          frameHeight: TILE_SIZE,
+          margin: 0,
+          spacing: 0,
+        });
+      }
     }
 
     if (s.player.sprite_atlas) {
       for (const dir of ["south", "north", "east", "west"] as const) {
         const url = s.player.sprite_atlas[dir];
-        if (url) this.load.image(`player-${dir}`, url);
+        const key = `player-${dir}`;
+        if (url && !this.textures.exists(key)) {
+          this.load.image(key, url);
+        }
       }
     }
 
@@ -94,42 +140,61 @@ export class AbyssScene extends Phaser.Scene {
       if (!npc.sprite_atlas) continue;
       for (const dir of ["south", "north", "east", "west"] as const) {
         const url = npc.sprite_atlas[dir];
-        if (url) this.load.image(`npc-${npc.id}-${dir}`, url);
+        const key = `npc-${npc.id}-${dir}`;
+        if (url && !this.textures.exists(key)) {
+          this.load.image(key, url);
+        }
       }
     }
   }
 
-  create() {
+  private tearDownRoom() {
+    this.player?.destroy();
+    this.player = undefined;
+    for (const sprite of this.npcSprites.values()) {
+      sprite.destroy();
+    }
+    this.npcSprites.clear();
+    if (this.tilemap) {
+      this.tilemap.destroy();
+      this.tilemap = undefined;
+    }
+  }
+
+  private setupKeyboard() {
+    if (!this.input.keyboard) return;
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.wasd = this.input.keyboard.addKeys("W,A,S,D") as typeof this.wasd;
+  }
+
+  private buildRoomFromState() {
     const s = this.state;
     const map = s.room.tilemap_data;
     const meta = s.biome?.tileset_metadata;
     const tilesetKey = s.biome ? `tileset-${s.biome.id}` : null;
 
     if (!map || !meta || !tilesetKey) {
-      // Bail early — let React show an error overlay instead.
       this.add.text(8, 8, "Tilemap data missing", { color: "#ff5252", fontSize: "12px" });
       return;
     }
 
     const tileGrid = buildTileIndexGrid(map, meta);
-    const tilemap = this.make.tilemap({
+    this.tilemap = this.make.tilemap({
       data: tileGrid,
       tileWidth: TILE_SIZE,
       tileHeight: TILE_SIZE,
     });
-    const ts = tilemap.addTilesetImage(tilesetKey, undefined, TILE_SIZE, TILE_SIZE, 0, 0);
+    const ts = this.tilemap.addTilesetImage(tilesetKey, undefined, TILE_SIZE, TILE_SIZE, 0, 0);
     if (ts) {
-      const layer = tilemap.createLayer(0, ts, 0, 0);
+      const layer = this.tilemap.createLayer(0, ts, 0, 0);
       if (layer) layer.setScale(ZOOM);
     }
 
-    // Camera: center on map.
     const mapPxW = map.width * RENDERED_TILE;
     const mapPxH = map.height * RENDERED_TILE;
     this.cameras.main.setBackgroundColor("#06070C");
     this.cameras.main.centerOn(mapPxW / 2, mapPxH / 2);
 
-    // Player.
     this.playerTile = { ...map.spawn };
     this.playerDir = "south";
     const playerKey = this.spriteKeyForDir("player", this.playerDir);
@@ -140,13 +205,10 @@ export class AbyssScene extends Phaser.Scene {
         playerKey,
       );
       this.player.setScale(CHARACTER_SCALE);
-      // Anchor the sprite by feet so taller characters appear to stand on
-      // the tile rather than be centered through it.
       this.player.setOrigin(0.5, 0.75);
       this.player.setDepth(10);
     }
 
-    // NPCs.
     for (const npc of s.npcs) {
       if (npc.tile_x === null || npc.tile_y === null) continue;
       const key = `npc-${npc.id}-south`;
@@ -162,13 +224,6 @@ export class AbyssScene extends Phaser.Scene {
       this.npcSprites.set(npc.id, sprite);
     }
 
-    // Input — keyboard arrow keys + WASD.
-    if (this.input.keyboard) {
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasd = this.input.keyboard.addKeys("W,A,S,D") as typeof this.wasd;
-    }
-
-    // Initial adjacency check (player may spawn next to an NPC).
     this.adjacentNpcId = null;
     this.checkNpcAdjacency();
   }
