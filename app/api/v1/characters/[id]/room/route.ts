@@ -201,36 +201,46 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       { onConflict: "character_id,room_id" },
     );
 
-  return NextResponse.json({
-    data: {
-      room: {
-        id: roomId,
-        floor_number: room.floor_number,
-        room_index: room.room_index,
-        room_type: room.room_type,
-        is_safe: room.is_safe,
-        biome_id: room.biome_id,
-        name: room.name,
-        name_localized: roomNameLocalized,
-        description: room.description,
-        description_localized: roomDescLocalized,
-        tilemap_data: room.tilemap_data,
+  return NextResponse.json(
+    {
+      data: {
+        room: {
+          id: roomId,
+          floor_number: room.floor_number,
+          room_index: room.room_index,
+          room_type: room.room_type,
+          is_safe: room.is_safe,
+          biome_id: room.biome_id,
+          name: room.name,
+          name_localized: roomNameLocalized,
+          description: room.description,
+          description_localized: roomDescLocalized,
+          tilemap_data: room.tilemap_data,
+        },
+        biome,
+        player: {
+          class_id: klass.id,
+          sprite_atlas: (klass.sprite_atlas as Record<string, string> | null) ?? null,
+          animation_atlas:
+            (klass.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
+          portrait_url: (klass.portrait_url as string | null) ?? null,
+        },
+        connections: connections.map((c) => ({
+          direction: c.direction,
+          to_room_id: c.to_room_id,
+          is_locked: c.is_locked,
+          unlock_requirement: c.unlock_requirement,
+        })),
+        npcs,
       },
-      biome,
-      player: {
-        class_id: klass.id,
-        sprite_atlas: (klass.sprite_atlas as Record<string, string> | null) ?? null,
-        animation_atlas:
-          (klass.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
-        portrait_url: (klass.portrait_url as string | null) ?? null,
-      },
-      connections: connections.map((c) => ({
-        direction: c.direction,
-        to_room_id: c.to_room_id,
-        is_locked: c.is_locked,
-        unlock_requirement: c.unlock_requirement,
-      })),
-      npcs,
     },
-  });
+    {
+      // Telegram WebViews and the Cloudflare edge can both decide to
+      // cache GET responses heuristically. The room state changes on
+      // every reseed (and after the player moves), so any cache hit
+      // means stale tilemap_data → mismatched walls → "no hay paso por
+      // ahí" or "I can walk through walls". no-store prevents that.
+      headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" },
+    },
+  );
 }

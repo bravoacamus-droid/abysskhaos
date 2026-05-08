@@ -157,13 +157,16 @@ const TILEMAPS: Record<string, TilemapData> = {
   },
   // The Awakening — long corridor with antechambers on each side. The
   // walls 'bulge' outward in the middle so the player feels the passage
-  // is leading them somewhere rather than just a straight tube.
+  // is leading them somewhere rather than just a straight tube. Both
+  // ends open with a 3-tile-wide doorway so the Wang renderer treats
+  // the gap as floor (single-tile gaps render as walls because all 4
+  // corner vertices end up "upper").
   f100_r02: {
     width: 13,
     height: 11,
     tiles: [
-      "######.######",
-      "######.######",
+      "#####...#####",
+      "####.....####",
       "##.........##",
       "##.........##",
       "#...........#",
@@ -171,29 +174,31 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "##.........##",
       "##.........##",
-      "######.######",
-      "######.######",
+      "####.....####",
+      "#####...#####",
     ],
     spawn: { x: 6, y: 9 },
     exits: { north: { x: 6, y: 0 }, south: { x: 6, y: 10 } },
   },
   // First Encounter — chamber with broken pillars in a 3×3 pattern.
-  // Tighter sightlines to feel hostile.
+  // Tighter sightlines to feel hostile. East corridor opens 3 tiles
+  // tall (rows 4-6) so the eastern doorway renders as bright floor
+  // instead of being indistinguishable from wall.
   f100_r03: {
     width: 13,
     height: 11,
     tiles: [
-      "######.######",
+      "#####...#####", // 13 chars
       "#...........#",
       "#.#..#.#..#.#",
       "#...........#",
-      "#.#..#.#..#.#",
+      "#.#..#.#..#..", // pillar at col 10 removed so east corridor reads
+      "#............", // east exit row, col 12 open
+      "#.#..#.#..#..",
       "#...........#",
-      "#.#..#.#..#.#",
       "#...........#",
       "#...........#",
-      "#...........#",
-      "######.######",
+      "#####...#####",
     ],
     spawn: { x: 6, y: 9 },
     exits: {
@@ -203,22 +208,22 @@ const TILEMAPS: Record<string, TilemapData> = {
     },
   },
   // The Cracked Steps — landing with a chest on the east wall and a
-  // crumbled bench in the south-west.
+  // crumbled bench in the south-west. West exit opens 3 tiles tall.
   f100_r04: {
     width: 13,
     height: 11,
     tiles: [
-      "######.######",
+      "#####...#####",
       "#...........#",
       "#...........#",
       "#...........#",
-      "#...........#",
-      ".............", // exit west @ (0, 5)
-      "#...........#",
+      "............#", // west exit corridor (rows 4-6), col 0 open
+      "............#",
+      "............#",
       "#.##........#", // crumbled bench
       "#...........#",
       "#...........#",
-      "######.######",
+      "#####...#####",
     ],
     spawn: { x: 6, y: 9 },
     exits: {
@@ -244,7 +249,7 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "#...........#",
       "##.........##",
-      "######.######",
+      "#####...#####",
     ],
     spawn: { x: 6, y: 9 },
     exits: { south: { x: 6, y: 10 } },
