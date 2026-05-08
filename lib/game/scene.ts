@@ -26,13 +26,21 @@ const RENDERED_TILE = TILE_SIZE * ZOOM;
 const MOVE_COOLDOWN_MS = 180;
 const TURN_COOLDOWN_MS = 80;
 /**
- * Character canvases come back from PixelLab at 68×68 (with the actual
- * character ~40px tall, padded for animations). At ZOOM scale that would
- * be 2.5 tiles tall — way too dominant for top-down RPG aesthetic. We
- * keep characters at 1× display so they sit at ~40px ≈ 1.25 tiles, in
- * line with Pokemon / Chrono Trigger overworld proportions.
+ * v3 character canvases come back at 92×92 (real character ~55×41 inside
+ * the padding). At 1× scale that's ~3 tiles tall — sprite would tower
+ * over the tilemap and visually "occupy" walls 2 tiles away. 0.55 brings
+ * the visible character to ~30×22 px ≈ 1 tile, matching Pokemon/Octopath
+ * overworld proportions and so the player feels like it stands ON a tile
+ * rather than spilling over neighbours.
  */
-const CHARACTER_SCALE = 1;
+const CHARACTER_SCALE = 0.55;
+/**
+ * Origin Y at 1.0 puts the sprite's bottom edge on the tile anchor — the
+ * character stands ON the tile rather than centered through it. This is
+ * what makes the apparent "feet" of the character line up with the
+ * walkable tile grid.
+ */
+const CHARACTER_ORIGIN_Y = 1.0;
 /**
  * Frames-per-second for walk + idle. PixelLab walk-4-frames animations
  * read naturally around 8fps (matches the 4-frame leg cycle felt in
@@ -293,7 +301,7 @@ export class AbyssScene extends Phaser.Scene {
         playerKey,
       );
       this.player.setScale(CHARACTER_SCALE);
-      this.player.setOrigin(0.5, 0.75);
+      this.player.setOrigin(0.5, CHARACTER_ORIGIN_Y);
       this.player.setDepth(10);
       // Kick the idle loop immediately if frames are present; otherwise the
       // static rotation texture set above is the fallback.
@@ -322,7 +330,7 @@ export class AbyssScene extends Phaser.Scene {
       }
       const sprite = this.add.sprite(npcX, npcY, key);
       sprite.setScale(CHARACTER_SCALE);
-      sprite.setOrigin(0.5, 0.75);
+      sprite.setOrigin(0.5, CHARACTER_ORIGIN_Y);
       sprite.setDepth(5);
       this.npcSprites.set(npc.id, sprite);
       this.playSpriteAnim(sprite, prefix, "idle", "south");
