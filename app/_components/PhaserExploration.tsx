@@ -327,9 +327,21 @@ function DPad({
   ];
   // One timer per button instance so quick-fire taps don't fight each other.
   const holdTimeouts = useRef<Map<Direction, ReturnType<typeof setTimeout>>>(new Map());
+  /**
+   * Modern browsers fire BOTH `pointerdown` and `touchstart` for a single
+   * tap. We register both handlers because some older WebViews only emit
+   * touch events, but dedupe by timestamp so a single physical tap doesn't
+   * count as two presses (which was producing the double-step regression).
+   */
+  const lastPressAt = useRef<Map<Direction, number>>(new Map());
+  const DEDUP_MS = 120;
 
   function startPress(direction: Direction) {
     if (disabled) return;
+    const now = performance.now();
+    const last = lastPressAt.current.get(direction) ?? 0;
+    if (now - last < DEDUP_MS) return; // ghost event from sibling pointer/touch handler
+    lastPressAt.current.set(direction, now);
     onPress(direction);
     const existing = holdTimeouts.current.get(direction);
     if (existing) clearTimeout(existing);
