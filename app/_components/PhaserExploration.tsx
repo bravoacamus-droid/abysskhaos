@@ -42,6 +42,11 @@ export default function PhaserExploration({
   const [adjacentNpc, setAdjacentNpc] = useState<RoomNpc | null>(null);
   const [activeNpc, setActiveNpc] = useState<RoomNpc | null>(null);
   const [moving, setMoving] = useState(false);
+  // Temporary instrumentation while we hunt down "D-pad clicks but nothing
+  // happens" on the live Telegram WebView. Each press updates this string;
+  // a small HUD renders it on top of the canvas. Strip after the input
+  // chain is verified end-to-end.
+  const [debugTrace, setDebugTrace] = useState<string>("idle");
 
   // Boot Phaser once. doMove is captured via closure → fine to skip dep.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,10 +154,16 @@ export default function PhaserExploration({
   }
 
   function dpadPress(direction: Direction) {
-    const scene = sceneRef.current as { pressDirectionOnce?: (d: Direction) => void } | null;
+    const scene = sceneRef.current as
+      | {
+          pressDirectionOnce?: (d: Direction) => void;
+        }
+      | null;
+    const sceneOk = !!scene && typeof scene.pressDirectionOnce === "function";
+    const stamp = new Date().toISOString().slice(11, 19);
+    setDebugTrace(`press ${direction} @ ${stamp} · scene:${sceneOk ? "ok" : "missing"}`);
     if (typeof window !== "undefined") {
-      // Temporary debug breadcrumb — remove once the input chain is verified.
-      console.debug("[abyss/dpad] press", direction, "scene?", !!scene);
+      console.log("[abyss/dpad]", { direction, sceneOk, sceneRefType: typeof scene });
     }
     scene?.pressDirectionOnce?.(direction);
   }
@@ -240,6 +251,12 @@ export default function PhaserExploration({
             input listener can't swallow the tap. */}
         <div className="absolute bottom-2 right-2 z-30">
           <DPad onPress={dpadPress} onHold={dpadHold} disabled={moving} />
+        </div>
+
+        {/* TEMP: visible input trace so we can see press events without the
+            console. Strip when the D-pad chain is confirmed end-to-end. */}
+        <div className="pointer-events-none absolute left-2 top-2 z-40 rounded bg-abyss-void/80 px-2 py-1 font-mono text-[9px] text-abyss-soul">
+          {debugTrace}
         </div>
 
         {error ? (
