@@ -174,7 +174,15 @@ export default function PhaserExploration({
         className="relative w-full overflow-hidden rounded-lg border border-abyss-coal/80 bg-abyss-void"
         style={{ height: "calc(100dvh - 220px)", maxHeight: "560px", minHeight: "320px" }}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        {/* Phaser canvas. pointer-events:none lets touches/clicks fall
+            through to the D-pad and NPC CTA overlays sitting in front of
+            it. Phaser's keyboard input is on `document`, not on the
+            canvas, so arrow / WASD movement still works on desktop. */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          style={{ pointerEvents: "none" }}
+        />
 
         {showBanner && state ? (
           <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
