@@ -76,6 +76,9 @@ export class AbyssScene extends Phaser.Scene {
   private callbacks: SceneCallbacks = {};
   private player?: Phaser.GameObjects.Sprite;
   private npcSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  /** Per-room debris that needs to die on tearDown: NPC placeholders,
+   *  exit doors + halos, etc. Lifetimes are tied to the room render. */
+  private roomDecor: Phaser.GameObjects.GameObject[] = [];
   private tilemap?: Phaser.Tilemaps.Tilemap;
   private playerTile = { x: 0, y: 0 };
   private playerDir: Direction = "south";
@@ -135,10 +138,18 @@ export class AbyssScene extends Phaser.Scene {
       return;
     }
 
-    this.queueAssetsForCurrentState();
+    const queuedKeys = this.queueAssetsForCurrentState();
     const onComplete = () => this.buildRoomFromState();
 
-    if (this.load.totalToLoad - this.load.totalComplete <= 0) {
+    // Old check (`totalToLoad - totalComplete <= 0`) raced when Phaser's
+    // loader auto-started newly-queued items before we could subscribe
+    // to COMPLETE — the early branch would fire before all textures
+    // existed, leaving Cedric (or any new NPC) without a texture and
+    // showing the red placeholder. Source-of-truth is whether every
+    // key we just queued already exists in the texture manager: if
+    // yes, render immediately; if not, wait for COMPLETE.
+    const allReady = queuedKeys.every((k) => this.textures.exists(k));
+    if (allReady) {
       onComplete();
     } else {
       this.load.once(Phaser.Loader.Events.COMPLETE, onComplete);
@@ -146,8 +157,11 @@ export class AbyssScene extends Phaser.Scene {
     }
   }
 
-  private queueAssetsForCurrentState() {
+  /** Returns the texture keys we just queued so callers can wait until
+   *  every one of them lands in the texture manager. */
+  private queueAssetsForCurrentState(): string[] {
     const s = this.state;
+    const queued: string[] = [];
 
     if (s.biome?.tileset_url && s.biome.tileset_metadata) {
       const key = `tileset-${s.biome.id}`;
@@ -158,6 +172,7 @@ export class AbyssScene extends Phaser.Scene {
           margin: 0,
           spacing: 0,
         });
+        queued.push(key);
       }
     }
 
@@ -167,14 +182,15 @@ export class AbyssScene extends Phaser.Scene {
         const key = `player-${dir}`;
         if (url && !this.textures.exists(key)) {
           this.load.image(key, url);
+          queued.push(key);
         }
       }
     }
-    this.queueAnimationAssets("player", s.player.animation_atlas ?? null);
+    queued.push(...this.queueAnimationAssets("player", s.player.animation_atlas ?? null));
 
-    // Queue the static door sprite once. Future props join the same path.
     if (!this.textures.exists(DOOR_TEXTURE_KEY)) {
       this.load.image(DOOR_TEXTURE_KEY, DOOR_SPRITE_URL);
+      queued.push(DOOR_TEXTURE_KEY);
     }
 
     for (const npc of s.npcs) {
@@ -184,15 +200,18 @@ export class AbyssScene extends Phaser.Scene {
           const key = `npc-${npc.id}-${dir}`;
           if (url && !this.textures.exists(key)) {
             this.load.image(key, url);
+            queued.push(key);
           }
         }
       }
-      this.queueAnimationAssets(`npc-${npc.id}`, npc.animation_atlas ?? null);
+      queued.push(...this.queueAnimationAssets(`npc-${npc.id}`, npc.animation_atlas ?? null));
     }
+    return queued;
   }
 
-  private queueAnimationAssets(prefix: string, atlas: AnimationAtlas | null) {
-    if (!atlas) return;
+  private queueAnimationAssets(prefix: string, atlas: AnimationAtlas | null): string[] {
+    const queued: string[] = [];
+    if (!atlas) return queued;
     for (const animName of ["walk", "idle"] as const) {
       const dirMap = atlas[animName];
       if (!dirMap) continue;
@@ -203,10 +222,12 @@ export class AbyssScene extends Phaser.Scene {
           const key = `${prefix}-${animName}-${dir}-${i}`;
           if (url && !this.textures.exists(key)) {
             this.load.image(key, url);
+            queued.push(key);
           }
         });
       }
     }
+    return queued;
   }
 
   /**
@@ -260,6 +281,13 @@ export class AbyssScene extends Phaser.Scene {
       sprite.destroy();
     }
     this.npcSprites.clear();
+    // Doors, halos, NPC placeholder rectangles and any other per-room
+    // decoration. Without this, things like the red Cedric placeholder
+    // bled into rooms where Cedric isn't present.
+    for (const obj of this.roomDecor) {
+      obj.destroy();
+    }
+    this.roomDecor = [];
     if (this.tilemap) {
       this.tilemap.destroy();
       this.tilemap = undefined;
@@ -336,12 +364,11 @@ export class AbyssScene extends Phaser.Scene {
       const npcY = npc.tile_y * RENDERED_TILE + RENDERED_TILE / 2;
       if (!this.textures.exists(key)) {
         console.warn(`[abyss/scene] NPC texture missing for ${npc.id}; key=${key} url=${npc.sprite_atlas?.south ?? "(none)"}`);
-        // Visible placeholder so the NPC's tile is still obvious — easier
-        // to debug "I see the talk banner but no character" reports.
-        this.add
+        const placeholder = this.add
           .rectangle(npcX, npcY - RENDERED_TILE / 4, RENDERED_TILE - 4, RENDERED_TILE - 4, 0xff5252, 0.85)
           .setStrokeStyle(2, 0xffffff)
           .setDepth(5);
+        this.roomDecor.push(placeholder);
         continue;
       }
       const sprite = this.add.sprite(npcX, npcY, key);
@@ -368,11 +395,9 @@ export class AbyssScene extends Phaser.Scene {
         const door = this.add
           .image(cx, cy, DOOR_TEXTURE_KEY)
           .setOrigin(0.5, 0.5)
-          // 64-px sprite over a 32-px tile would look oversized, scale
-          // it down to ~1.4 tiles tall so it reads as a doorway without
-          // covering surrounding floor.
           .setScale(0.7)
           .setDepth(7);
+        this.roomDecor.push(halo, door);
         this.tweens.add({
           targets: halo,
           alpha: { from: 0.28, to: 0.12 },
@@ -381,7 +406,6 @@ export class AbyssScene extends Phaser.Scene {
           repeat: -1,
           ease: "Sine.easeInOut",
         });
-        // tiny floating idle on the door itself so it's clearly "active"
         this.tweens.add({
           targets: door,
           y: { from: cy - 1, to: cy + 1 },

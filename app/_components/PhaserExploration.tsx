@@ -93,10 +93,14 @@ export default function PhaserExploration({
           antialias: false,
           fps: { target: 30, forceSetTimeOut: true },
           scale: {
-            mode: Phaser.Scale.FIT,
+            // RESIZE keeps the canvas filling the wrapper div on every
+            // viewport change. The camera follows the player so even
+            // tall portrait screens reveal more map without leaving big
+            // black bars at top/bottom.
+            mode: Phaser.Scale.RESIZE,
             autoCenter: Phaser.Scale.CENTER_BOTH,
-            width: 320,
-            height: 256,
+            width: "100%",
+            height: "100%",
           },
           scene: [],
           autoFocus: false,
@@ -196,7 +200,7 @@ export default function PhaserExploration({
 
       <div
         className="relative w-full overflow-hidden rounded-lg border border-abyss-coal/80 bg-abyss-void"
-        style={{ height: "calc(100dvh - 220px)", maxHeight: "560px", minHeight: "320px" }}
+        style={{ height: "calc(100dvh - 180px)", minHeight: "400px" }}
       >
         {/* Phaser canvas. pointer-events:none on the wrapper + the
             data-attribute selector in globals.css make sure the <canvas>
