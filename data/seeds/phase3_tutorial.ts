@@ -181,14 +181,15 @@ const TILEMAPS: Record<string, TilemapData> = {
     exits: { north: { x: 6, y: 0 }, south: { x: 6, y: 10 } },
   },
   // First Encounter — chamber with broken pillars in a 3×3 pattern.
-  // Tighter sightlines to feel hostile. East corridor opens 3 tiles
-  // tall (rows 4-6) so the eastern doorway renders as bright floor
-  // instead of being indistinguishable from wall.
+  // The tutorial is linear so this room only has 2 real exits: south
+  // (back to The Awakening) and east (forward to Cracked Steps).
+  // North wall is solid — adding a north exit here would dead-end since
+  // there's no `room_connections` row for it.
   f100_r03: {
     width: 13,
     height: 11,
     tiles: [
-      "#####...#####", // 13 chars
+      "#############", // top wall solid — no north connection in DB
       "#...........#",
       "#.#..#.#..#.#",
       "#...........#",
@@ -198,22 +199,23 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "#...........#",
       "#...........#",
-      "#####...#####",
+      "#####...#####", // south exit
     ],
     spawn: { x: 6, y: 9 },
     exits: {
-      north: { x: 6, y: 0 },
       south: { x: 6, y: 10 },
       east: { x: 12, y: 5 },
     },
   },
   // The Cracked Steps — landing with a chest on the east wall and a
-  // crumbled bench in the south-west. West exit opens 3 tiles tall.
+  // crumbled bench in the south-west. Only 2 real exits in the tutorial
+  // chain: north (forward to Threshold's Edge) and west (back to First
+  // Encounter). South wall is solid for the same reason as r03's north.
   f100_r04: {
     width: 13,
     height: 11,
     tiles: [
-      "#####...#####",
+      "#####...#####", // north exit
       "#...........#",
       "#...........#",
       "#...........#",
@@ -223,12 +225,11 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#.##........#", // crumbled bench
       "#...........#",
       "#...........#",
-      "#####...#####",
+      "#############", // bottom wall solid — no south connection in DB
     ],
     spawn: { x: 6, y: 9 },
     exits: {
       north: { x: 6, y: 0 },
-      south: { x: 6, y: 10 },
       west: { x: 0, y: 5 },
     },
     props: [{ kind: "chest", x: 10, y: 5 }],
