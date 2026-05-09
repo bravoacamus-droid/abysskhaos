@@ -85,9 +85,21 @@ export function tileIndexFromBox(
 }
 
 /**
- * Build a 2D number array of Phaser tile indices for the room. Cells that
- * find no matching Wang tile fall back to the "all-lower" tile (pure floor)
- * if available, otherwise 0.
+ * Build a 2D number array of Phaser tile indices for the room.
+ *
+ * Phase 3c switched from Wang corner-based blending to direct cell-based
+ * rendering. The corner model was elegant for transitions but produced a
+ * critical mismatch with the collision layer: a single floor cell (`.`)
+ * surrounded by walls has all 4 corner vertices "upper", so the Wang
+ * lookup picked the all-wall tile — visually identical to surrounding
+ * walls, even though the cell is walkable. That's how exits ended up
+ * looking like solid stone.
+ *
+ * Cell-based: every `.` paints the all-lower tile, every `#` paints the
+ * all-upper tile. The visual is now 1:1 with `isWallCell`, so the player
+ * never sees passable floor that looks like wall (or walkable wall).
+ * Trade-off: transitions are blocky instead of soft, but PixelLab's
+ * tileset's all-lower tile already includes its own subtle bevel.
  */
 export function buildTileIndexGrid(
   map: TilemapData,
@@ -95,29 +107,25 @@ export function buildTileIndexGrid(
 ): number[][] {
   const W = map.width;
   const H = map.height;
-  const verts = buildVertexGrid(map);
   const imageWidthPx = meta.tileset_image.dimensions.width;
 
   const allTiles = tilesOf(meta);
   if (allTiles.length === 0) {
-    // No tiles in the metadata — return a blank grid rather than throw,
-    // so Phaser still produces a (visually wrong but non-crashing) layer.
     return Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
   }
-  const fallbackTile =
+  const lowerTile =
     findTileByCorners(meta, "lower", "lower", "lower", "lower") ?? allTiles[0]!;
-  const fallbackIdx = tileIndexFromBox(fallbackTile.bounding_box, imageWidthPx);
+  const upperTile =
+    findTileByCorners(meta, "upper", "upper", "upper", "upper") ?? lowerTile;
+  const lowerIdx = tileIndexFromBox(lowerTile.bounding_box, imageWidthPx);
+  const upperIdx = tileIndexFromBox(upperTile.bounding_box, imageWidthPx);
 
   const out: number[][] = [];
   for (let y = 0; y < H; y++) {
     const row: number[] = [];
     for (let x = 0; x < W; x++) {
-      const NW = verts[y]![x]!;
-      const NE = verts[y]![x + 1]!;
-      const SW = verts[y + 1]![x]!;
-      const SE = verts[y + 1]![x + 1]!;
-      const tile = findTileByCorners(meta, NW, NE, SW, SE);
-      row.push(tile ? tileIndexFromBox(tile.bounding_box, imageWidthPx) : fallbackIdx);
+      const ch = map.tiles[y]?.[x] ?? "#";
+      row.push(ch === "#" ? upperIdx : lowerIdx);
     }
     out.push(row);
   }

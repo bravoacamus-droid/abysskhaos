@@ -235,10 +235,17 @@ export type DialoguePayload = {
 };
 
 export function fetchRoom(opts: FetchOpts & { characterId: string; locale: string }): Promise<RoomState> {
-  return call(`/api/v1/characters/${opts.characterId}/room?locale=${encodeURIComponent(opts.locale)}`, "GET", {
-    initData: opts.initData,
-    signal: opts.signal,
-  });
+  // Cache-bust with a timestamp so Telegram WebView and intermediate
+  // proxies can never hand back a stale tilemap. The server already
+  // sends `Cache-Control: no-store`, but some webviews honour their own
+  // heuristic cache when the URL hasn't changed across calls — adding
+  // _t=Date.now() guarantees the URL is unique per request.
+  const t = Date.now();
+  return call(
+    `/api/v1/characters/${opts.characterId}/room?locale=${encodeURIComponent(opts.locale)}&_t=${t}`,
+    "GET",
+    { initData: opts.initData, signal: opts.signal },
+  );
 }
 
 export function moveCharacter(

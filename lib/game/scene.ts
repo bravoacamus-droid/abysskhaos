@@ -28,12 +28,12 @@ const TURN_COOLDOWN_MS = 80;
 /**
  * v3 character canvases come back at 92×92 (real character ~55×41 inside
  * the padding). At 1× scale that's ~3 tiles tall — sprite would tower
- * over the tilemap and visually "occupy" walls 2 tiles away. 0.55 brings
- * the visible character to ~30×22 px ≈ 1 tile, matching Pokemon/Octopath
- * overworld proportions and so the player feels like it stands ON a tile
- * rather than spilling over neighbours.
+ * over the tilemap and visually "occupy" walls 2 tiles away. 0.7 keeps
+ * the visible character at ~38×28 px ≈ 1.2 tiles — a touch larger than
+ * the strict-Pokemon 1.0 ratio so the detail of armor/weapon is legible
+ * without bleeding over neighbouring walls.
  */
-const CHARACTER_SCALE = 0.55;
+const CHARACTER_SCALE = 0.7;
 /**
  * Origin Y at 1.0 puts the sprite's bottom edge on the tile anchor — the
  * character stands ON the tile rather than centered through it. This is
