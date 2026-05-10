@@ -21,7 +21,7 @@ import type { AnimationAtlas, Direction, RoomState } from "@/lib/client/api";
 import { buildTileIndexGrid, isWallCell } from "./wang";
 
 export const TILE_SIZE = 16;
-export const ZOOM = 2;
+export const ZOOM = 3;
 const RENDERED_TILE = TILE_SIZE * ZOOM;
 const MOVE_COOLDOWN_MS = 180;
 const TURN_COOLDOWN_MS = 80;
@@ -384,9 +384,16 @@ export class AbyssScene extends Phaser.Scene {
     // We render the door over the exit tile itself (which is floor `.`
     // in the seed) so it visually "fills" the gap in the wall. A soft
     // pulsing halo behind the door draws the eye from across the map.
+    // Server-side connections are the source of truth. If the client's
+    // cached tilemap_data has an exit cell that the server doesn't have
+    // a connection for, we silently ignore it — no door, no exit
+    // trigger. This is what was producing "no hay paso por ahí" right
+    // after spawn: stale tilemap with phantom exits.
+    const validExitDirs = new Set(s.connections.map((c) => c.direction));
     if (this.textures.exists(DOOR_TEXTURE_KEY)) {
-      for (const [, exit] of Object.entries(map.exits)) {
+      for (const [dirRaw, exit] of Object.entries(map.exits)) {
         if (!exit) continue;
+        if (!validExitDirs.has(dirRaw as Direction)) continue;
         const cx = exit.x * RENDERED_TILE + RENDERED_TILE / 2;
         const cy = exit.y * RENDERED_TILE + RENDERED_TILE / 2;
         const halo = this.add
@@ -496,8 +503,12 @@ export class AbyssScene extends Phaser.Scene {
     const ny = this.playerTile.y + dy;
 
     // Exit detection: stepping ON the exit tile triggers transition.
+    // Only honour exits whose direction has a real DB connection, so a
+    // stale client-side tilemap can't trigger a server-side NO_EXIT 409.
+    const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
     for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
       if (!exit) continue;
+      if (!validExitDirs.has(exitDirRaw as Direction)) continue;
       if (nx === exit.x && ny === exit.y) {
         this.callbacks.onExitRequested?.(exitDirRaw as Direction);
         this.moveCooldownMs = 600;
