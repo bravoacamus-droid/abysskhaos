@@ -47,20 +47,20 @@ type Job = {
 
 const JOBS: Job[] = [
   {
-    characterId: "3ab3593a-a4df-40c7-bd0e-9c29344cb8ce",
+    characterId: "2ca1249f-e7d5-4aa3-aa5a-3822492f3e3c",
     target: { table: "classes", id: "warrior" },
     entityId: "warrior",
-    label: "Camus warrior v3 octopath",
+    label: "Camus warrior v4 chibi-detailed",
     prompt:
-      "HD-2D pixel art warrior, Octopath Traveler / FF VI Pixel Remaster style, head ~1/3 of body, defined dark iron plate armor with crimson trim, two-handed sword on back, top-down 64px sprite",
+      "true chibi RPG warrior knight in horned iron helmet and ornate dark iron plate armor with crimson trim, two-handed sword strapped on back, head_size 1.9, FF VI Pixel Remaster + Octopath Traveler aesthetic, detailed shading",
   },
   {
-    characterId: "69d030fa-fb6c-4b89-938c-757593554e67",
+    characterId: "e6c81059-1769-4a66-b89d-9851b6065517",
     target: { table: "npcs", id: "cedric_the_broken" },
     entityId: "cedric_the_broken",
-    label: "Cedric NPC v3 octopath",
+    label: "Cedric NPC v4 chibi-detailed",
     prompt:
-      "HD-2D pixel art ex-gladiator, Octopath Traveler / FF VI Pixel Remaster style, missing left arm, leather smithing apron, weathered face with grey-streaked beard, top-down 64px sprite",
+      "true chibi pixel art ex-gladiator wielding blacksmith hammer, missing left arm, leather smithing apron over faded brown tunic, weathered face with grey beard, head_size 1.9, FF VI Pixel Remaster aesthetic, detailed shading",
   },
 ];
 
