@@ -151,21 +151,31 @@ export class AbyssScene extends Phaser.Scene {
     }
 
     const queuedKeys = this.queueAssetsForCurrentState();
-    const onComplete = () => this.buildRoomFromState();
+    let built = false;
+    const onComplete = () => {
+      if (built) return;
+      built = true;
+      this.buildRoomFromState();
+    };
 
-    // Old check (`totalToLoad - totalComplete <= 0`) raced when Phaser's
-    // loader auto-started newly-queued items before we could subscribe
-    // to COMPLETE — the early branch would fire before all textures
-    // existed, leaving Cedric (or any new NPC) without a texture and
-    // showing the red placeholder. Source-of-truth is whether every
-    // key we just queued already exists in the texture manager: if
-    // yes, render immediately; if not, wait for COMPLETE.
     const allReady = queuedKeys.every((k) => this.textures.exists(k));
     if (allReady) {
       onComplete();
     } else {
       this.load.once(Phaser.Loader.Events.COMPLETE, onComplete);
       this.load.start();
+      // Safety: if any file 404s/CORS-fails Phaser may never emit
+      // COMPLETE on this batch. Fall back after 5s and render with
+      // whatever did land — buildRoomFromState already skips missing
+      // textures gracefully. Without this the screen stayed black.
+      this.time.delayedCall(5000, () => {
+        if (built) return;
+        const missing = queuedKeys.filter((k) => !this.textures.exists(k));
+        if (missing.length > 0) {
+          console.warn("[abyss/scene] loadRoom timeout — proceeding with " + missing.length + " missing textures:", missing.slice(0, 8));
+        }
+        onComplete();
+      });
     }
   }
 
@@ -310,15 +320,18 @@ export class AbyssScene extends Phaser.Scene {
   }
 
   private tearDownRoom() {
+    // Kill every running tween first. Halos and doors had infinite
+    // yoyo alpha tweens running on themselves; destroying the target
+    // without killing its tween leaves the tween dereferencing a null
+    // `sys` on the next tick — that's the cascade of "Cannot read
+    // properties of null (reading 'sys')" the user reported.
+    this.tweens.killAll();
     this.player?.destroy();
     this.player = undefined;
     for (const sprite of this.npcSprites.values()) {
       sprite.destroy();
     }
     this.npcSprites.clear();
-    // Doors, halos, NPC placeholder rectangles and any other per-room
-    // decoration. Without this, things like the red Cedric placeholder
-    // bled into rooms where Cedric isn't present.
     for (const obj of this.roomDecor) {
       obj.destroy();
     }
@@ -369,27 +382,41 @@ export class AbyssScene extends Phaser.Scene {
     // camera bounds are widened to include this halo so the bg can
     // actually be on-screen — collision still keeps the player inside
     // the original mapPxW × mapPxH.
+    // Extend the cave visually beyond the walkable map so portrait phones
+    // don't see a black void around small rooms. Try to extract the
+    // all-upper tile from the tileset PNG into its own texture and tile
+    // it; if any of the canvas plumbing fails (Phaser 4 API quirks,
+    // CORS on the source image), swallow it and fall back to plain
+    // bounds-locked camera.
     const BG_HALO_PX = 1200;
-    const tilesArr = meta.tileset_data?.tiles ?? meta.tiles ?? [];
-    const upperTile = tilesArr.find(
-      (t) =>
-        t.corners.NW === "upper" &&
-        t.corners.NE === "upper" &&
-        t.corners.SW === "upper" &&
-        t.corners.SE === "upper",
-    );
     const bgKey = `bg-${s.biome?.id ?? "wall"}`;
-    if (upperTile && !this.textures.exists(bgKey)) {
-      const bb = upperTile.bounding_box;
-      const sourceTexture = this.textures.get(tilesetKey);
-      const sourceImg = sourceTexture.getSourceImage();
-      const cnv = this.textures.createCanvas(bgKey, bb.width, bb.height);
-      if (cnv && sourceImg instanceof HTMLImageElement) {
-        cnv.context.drawImage(sourceImg, bb.x, bb.y, bb.width, bb.height, 0, 0, bb.width, bb.height);
-        cnv.refresh();
+    let bgReady = this.textures.exists(bgKey);
+    if (!bgReady) {
+      try {
+        const tilesArr = meta.tileset_data?.tiles ?? meta.tiles ?? [];
+        const upperTile = tilesArr.find(
+          (t) =>
+            t.corners.NW === "upper" &&
+            t.corners.NE === "upper" &&
+            t.corners.SW === "upper" &&
+            t.corners.SE === "upper",
+        );
+        if (upperTile) {
+          const bb = upperTile.bounding_box;
+          const sourceTexture = this.textures.get(tilesetKey);
+          const sourceImg = sourceTexture.getSourceImage() as CanvasImageSource | null;
+          const cnv = this.textures.createCanvas(bgKey, bb.width, bb.height);
+          if (cnv && sourceImg) {
+            cnv.context.drawImage(sourceImg, bb.x, bb.y, bb.width, bb.height, 0, 0, bb.width, bb.height);
+            cnv.refresh();
+            bgReady = true;
+          }
+        }
+      } catch (err) {
+        console.warn("[abyss/scene] cave halo extraction failed", err);
       }
     }
-    if (this.textures.exists(bgKey)) {
+    if (bgReady) {
       const bgSprite = this.add
         .tileSprite(
           -BG_HALO_PX,
@@ -402,13 +429,16 @@ export class AbyssScene extends Phaser.Scene {
         .setDepth(-10)
         .setTileScale(ZOOM, ZOOM);
       this.roomDecor.push(bgSprite);
+      this.cameras.main.setBounds(
+        -BG_HALO_PX,
+        -BG_HALO_PX,
+        mapPxW + BG_HALO_PX * 2,
+        mapPxH + BG_HALO_PX * 2,
+      );
+    } else {
+      // No halo — restrict camera to map bounds so we don't expose the void.
+      this.cameras.main.setBounds(0, 0, mapPxW, mapPxH);
     }
-    this.cameras.main.setBounds(
-      -BG_HALO_PX,
-      -BG_HALO_PX,
-      mapPxW + BG_HALO_PX * 2,
-      mapPxH + BG_HALO_PX * 2,
-    );
     this.cameras.main.centerOn(mapPxW / 2, mapPxH / 2);
 
     this.playerTile = { ...map.spawn };
