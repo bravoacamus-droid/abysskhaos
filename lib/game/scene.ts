@@ -691,44 +691,54 @@ export class AbyssScene extends Phaser.Scene {
       return;
     }
 
-    // Commit the step. Tween smoothly to the destination tile so the
-    // step is visibly deliberate, but kill any prior tween on the
-    // player first so consecutive presses don't stack/fight and snap
-    // the sprite back to an earlier position.
+    // Commit the step.
     this.playerTile = { x: nx, y: ny };
     const targetX = nx * RENDERED_TILE + RENDERED_TILE / 2;
     const targetY = ny * RENDERED_TILE + RENDERED_TILE / 2;
-    if (this.player) {
-      this.tweens.killTweensOf(this.player);
-      this.tweens.add({
-        targets: this.player,
-        x: targetX,
-        y: targetY,
-        duration: MOVE_TWEEN_MS,
-        ease: "Linear",
-      });
-    }
-    this.setPlayerAnimState("walk");
-    this.moveCooldownMs = MOVE_COOLDOWN_MS;
-    this.checkNpcAdjacency();
 
-    // Exit trigger: fire IMMEDIATELY when the player steps onto an
-    // exit tile, so the transition feels like a tap-through. The
-    // tween continues so the sprite still visibly arrives at the
-    // door, but the network call goes out in parallel — by the time
-    // the next room renders, the player is already on the door.
-    // Lock the cooldown out for a full second to prevent any extra
-    // step queueing up while doMove() is in flight.
+    // Is this step landing on an exit? If yes we skip the slide tween
+    // and snap the sprite onto the door tile so the room transition
+    // can fire while the player is visibly at the door — without this,
+    // the 220ms tween got interrupted mid-slide by the room load,
+    // showing a "half step then teleport" jump that read as glitchy.
     const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
+    let landedOnExit: Direction | null = null;
     for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
       if (!exit) continue;
       if (!validExitDirs.has(exitDirRaw as Direction)) continue;
       if (this.playerTile.x === exit.x && this.playerTile.y === exit.y) {
-        this.moveCooldownMs = 1000;
-        this.callbacks.onExitRequested?.(exitDirRaw as Direction);
-        return;
+        landedOnExit = exitDirRaw as Direction;
+        break;
       }
     }
+
+    if (this.player) {
+      this.tweens.killTweensOf(this.player);
+      if (landedOnExit) {
+        // Snap to the door, no slide.
+        this.player.x = targetX;
+        this.player.y = targetY;
+      } else {
+        this.tweens.add({
+          targets: this.player,
+          x: targetX,
+          y: targetY,
+          duration: MOVE_TWEEN_MS,
+          ease: "Linear",
+        });
+      }
+    }
+    this.setPlayerAnimState("walk");
+    this.checkNpcAdjacency();
+
+    if (landedOnExit) {
+      // Lock movement until loadRoom heals state. 1s is generous;
+      // loadRoom will further clamp via Math.max(current, 250).
+      this.moveCooldownMs = 1000;
+      this.callbacks.onExitRequested?.(landedOnExit);
+      return;
+    }
+    this.moveCooldownMs = MOVE_COOLDOWN_MS;
   }
 
   private checkNpcAdjacency() {
