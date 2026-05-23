@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const { data: character, error: charErr } = await supabase
     .from("characters")
-    .select("id, user_id, current_room_id, current_floor, class_id")
+    .select("id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir")
     .eq("id", params.id)
     .eq("is_active", true)
     .maybeSingle();
@@ -102,7 +102,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     display_scale: number;
     metadata: Record<string, unknown>;
   };
-  const tilemap = room.tilemap_data as { props?: TilemapProp[] } | null;
+  type Direction = "north" | "south" | "east" | "west";
+  type Tilemap = {
+    width: number;
+    height: number;
+    spawn: { x: number; y: number };
+    exits: Partial<Record<Direction, { x: number; y: number }>>;
+    props?: TilemapProp[];
+  };
+  const tilemap = room.tilemap_data as Tilemap | null;
   const hydratedProps: HydratedProp[] = (tilemap?.props ?? [])
     .map((p) => {
       const def = propsById.get(p.kind);
@@ -118,6 +126,28 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       };
     })
     .filter((p): p is HydratedProp => p !== null);
+
+  // Override the default spawn with a tile next to the exit the player
+  // just entered through, so crossing south → north feels coherent.
+  // Step one tile *inward* from the entry exit (away from the wall it
+  // sits on), avoiding immediate exit re-trigger.
+  let spawnedTilemap = tilemap;
+  if (tilemap && character.current_room_entry_dir) {
+    const entryDir = character.current_room_entry_dir as Direction;
+    const exit = tilemap.exits?.[entryDir];
+    if (exit) {
+      const inward = {
+        north: { dx: 0, dy: 1 },
+        south: { dx: 0, dy: -1 },
+        east: { dx: -1, dy: 0 },
+        west: { dx: 1, dy: 0 },
+      }[entryDir];
+      spawnedTilemap = {
+        ...tilemap,
+        spawn: { x: exit.x + inward.dx, y: exit.y + inward.dy },
+      };
+    }
+  }
 
   // Biome tileset.
   let biome: { id: string; tileset_url: string | null; tileset_metadata: unknown } | null = null;
@@ -246,7 +276,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
           name_localized: roomNameLocalized,
           description: room.description,
           description_localized: roomDescLocalized,
-          tilemap_data: room.tilemap_data,
+          tilemap_data: spawnedTilemap,
         },
         biome,
         player: {

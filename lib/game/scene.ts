@@ -207,12 +207,24 @@ export class AbyssScene extends Phaser.Scene {
 
     // Map props (dragon, portal, bridge, tree, etc.) — server hydrates
     // sprite_url for each, we load once per (kind) so revisiting a room
-    // hits the texture cache.
+    // hits the texture cache. Props with metadata.animation_frames also
+    // queue each frame as its own texture so we can build a Phaser
+    // animation later.
     for (const prop of s.props ?? []) {
       const key = propTextureKey(prop.kind);
       if (!this.textures.exists(key)) {
         this.load.image(key, prop.sprite_url);
         queued.push(key);
+      }
+      const frames = prop.metadata?.animation_frames as string[] | undefined;
+      if (frames) {
+        frames.forEach((url, i) => {
+          const fk = `${propTextureKey(prop.kind)}-anim-${i}`;
+          if (!this.textures.exists(fk)) {
+            this.load.image(fk, url);
+            queued.push(fk);
+          }
+        });
       }
     }
 
@@ -349,11 +361,54 @@ export class AbyssScene extends Phaser.Scene {
     const mapPxW = map.width * RENDERED_TILE;
     const mapPxH = map.height * RENDERED_TILE;
     this.cameras.main.setBackgroundColor("#06070C");
-    // Bound the camera to the map so when the player walks toward a
-    // corner the camera stops at the edge instead of revealing the void
-    // beyond. setBounds + startFollow with lerp gives a Pokemon-feel
-    // soft chase without overshoot.
-    this.cameras.main.setBounds(0, 0, mapPxW, mapPxH);
+
+    // Extend the cave visually beyond the walkable map so portrait phones
+    // don't see a black void around small rooms. We carve a single
+    // "upper terrain" tile out of the tileset PNG via a runtime canvas
+    // texture and tile it across a huge background at low depth. The
+    // camera bounds are widened to include this halo so the bg can
+    // actually be on-screen — collision still keeps the player inside
+    // the original mapPxW × mapPxH.
+    const BG_HALO_PX = 1200;
+    const tilesArr = meta.tileset_data?.tiles ?? meta.tiles ?? [];
+    const upperTile = tilesArr.find(
+      (t) =>
+        t.corners.NW === "upper" &&
+        t.corners.NE === "upper" &&
+        t.corners.SW === "upper" &&
+        t.corners.SE === "upper",
+    );
+    const bgKey = `bg-${s.biome?.id ?? "wall"}`;
+    if (upperTile && !this.textures.exists(bgKey)) {
+      const bb = upperTile.bounding_box;
+      const sourceTexture = this.textures.get(tilesetKey);
+      const sourceImg = sourceTexture.getSourceImage();
+      const cnv = this.textures.createCanvas(bgKey, bb.width, bb.height);
+      if (cnv && sourceImg instanceof HTMLImageElement) {
+        cnv.context.drawImage(sourceImg, bb.x, bb.y, bb.width, bb.height, 0, 0, bb.width, bb.height);
+        cnv.refresh();
+      }
+    }
+    if (this.textures.exists(bgKey)) {
+      const bgSprite = this.add
+        .tileSprite(
+          -BG_HALO_PX,
+          -BG_HALO_PX,
+          mapPxW + BG_HALO_PX * 2,
+          mapPxH + BG_HALO_PX * 2,
+          bgKey,
+        )
+        .setOrigin(0, 0)
+        .setDepth(-10)
+        .setTileScale(ZOOM, ZOOM);
+      this.roomDecor.push(bgSprite);
+    }
+    this.cameras.main.setBounds(
+      -BG_HALO_PX,
+      -BG_HALO_PX,
+      mapPxW + BG_HALO_PX * 2,
+      mapPxH + BG_HALO_PX * 2,
+    );
     this.cameras.main.centerOn(mapPxW / 2, mapPxH / 2);
 
     this.playerTile = { ...map.spawn };
@@ -417,39 +472,56 @@ export class AbyssScene extends Phaser.Scene {
       if (!this.textures.exists(key)) continue;
       const cx = prop.x * RENDERED_TILE + RENDERED_TILE / 2;
       const cy = prop.y * RENDERED_TILE + RENDERED_TILE / 2;
-      const sprite = this.add
-        .image(cx, cy, key)
+      const animFrames = prop.metadata?.animation_frames as string[] | undefined;
+      const animFramerate = (prop.metadata?.animation_framerate as number | undefined) ?? 6;
+      // Use Sprite (not Image) when we have animation frames so we can
+      // play Phaser.Animation; Image is fine for static decor.
+      const useSprite = !!animFrames;
+      const obj = useSprite
+        ? this.add.sprite(cx, cy, key)
+        : this.add.image(cx, cy, key);
+      obj
         .setOrigin(0.5, 0.7)
         .setScale(prop.display_scale ?? 1.0)
-        // Props with collision (dragon, tree) sit BELOW the player so
-        // the player can walk in front of them. Decorative passable
-        // props (portal, bridge) sit BELOW the player too — bridge so
-        // the player walks over the planks; portal so the body is
-        // visible standing in front of the swirl.
         .setDepth(prop.kind === "cave_bridge_stone" ? 1 : 4);
-      this.roomDecor.push(sprite);
+      this.roomDecor.push(obj);
       if (prop.collision) {
         this.propBlockers.add(`${prop.x},${prop.y}`);
       }
+      if (useSprite && animFrames) {
+        const animKey = `prop-anim-${prop.kind}`;
+        if (!this.anims.exists(animKey)) {
+          const frameRefs = animFrames
+            .map((_, i) => ({ key: `${key}-anim-${i}` }))
+            .filter((f) => this.textures.exists(f.key));
+          if (frameRefs.length > 0) {
+            this.anims.create({
+              key: animKey,
+              frames: frameRefs,
+              frameRate: animFramerate,
+              repeat: -1,
+            });
+          }
+        }
+        if (this.anims.exists(animKey)) {
+          (obj as Phaser.GameObjects.Sprite).play(animKey);
+        }
+      }
       if (prop.kind === "portal_hyperdimensional") {
+        // Soft halo behind the sprite to widen its presence; the sprite
+        // itself now carries its own swirl animation so we no longer
+        // need a fake angle tween.
         const halo = this.add
-          .circle(cx, cy, RENDERED_TILE * 0.9, 0x9d6cff, 0.32)
+          .circle(cx, cy, RENDERED_TILE * 0.9, 0x9d6cff, 0.28)
           .setDepth(3);
         this.roomDecor.push(halo);
         this.tweens.add({
           targets: halo,
-          alpha: { from: 0.5, to: 0.15 },
+          alpha: { from: 0.42, to: 0.14 },
           duration: 900,
           yoyo: true,
           repeat: -1,
           ease: "Sine.easeInOut",
-        });
-        this.tweens.add({
-          targets: sprite,
-          angle: 360,
-          duration: 8000,
-          repeat: -1,
-          ease: "Linear",
         });
       }
     }

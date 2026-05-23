@@ -72,11 +72,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .single();
   if (tErr) return NextResponse.json({ error: "DB_FAILED", detail: tErr.message }, { status: 500 });
 
+  // Track which side of the new room the player just walked in from so
+  // /room can spawn them next to that exit rather than at the room's
+  // hardcoded spawn tile. If we moved south, we came in through the
+  // new room's north door — entry_dir is the opposite of body.direction.
+  const OPPOSITE: Record<string, string> = {
+    north: "south",
+    south: "north",
+    east: "west",
+    west: "east",
+  };
+  const entryDir = OPPOSITE[body.direction] ?? null;
+
   const { error: upErr } = await supabase
     .from("characters")
     .update({
       current_room_id: conn.to_room_id,
       current_floor: target.floor_number,
+      current_room_entry_dir: entryDir,
     })
     .eq("id", character.id);
   if (upErr) return NextResponse.json({ error: "DB_FAILED", detail: upErr.message }, { status: 500 });
