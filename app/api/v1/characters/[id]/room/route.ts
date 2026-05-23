@@ -55,7 +55,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     if (setErr) return NextResponse.json({ error: "DB_FAILED", detail: setErr.message }, { status: 500 });
   }
 
-  const [roomRes, connRes, npcRes, classRes] = await Promise.all([
+  const [roomRes, connRes, npcRes, classRes, propsRes] = await Promise.all([
     supabase
       .from("rooms")
       .select(
@@ -76,17 +76,48 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       .select("id, name, sprite_atlas, animation_atlas, portrait_url")
       .eq("id", character.class_id)
       .single(),
+    supabase.from("props").select("id, sprite_url, collision, display_scale, metadata"),
   ]);
 
   if (roomRes.error) return NextResponse.json({ error: "DB_FAILED", detail: roomRes.error.message }, { status: 500 });
   if (connRes.error) return NextResponse.json({ error: "DB_FAILED", detail: connRes.error.message }, { status: 500 });
   if (npcRes.error) return NextResponse.json({ error: "DB_FAILED", detail: npcRes.error.message }, { status: 500 });
   if (classRes.error) return NextResponse.json({ error: "DB_FAILED", detail: classRes.error.message }, { status: 500 });
+  if (propsRes.error) return NextResponse.json({ error: "DB_FAILED", detail: propsRes.error.message }, { status: 500 });
 
   const room = roomRes.data;
   const connections = connRes.data ?? [];
   const npcRowsByRoom = npcRes.data ?? [];
   const klass = classRes.data;
+  const propRows = propsRes.data ?? [];
+  const propsById = new Map(propRows.map((p) => [p.id as string, p]));
+
+  // Hydrate room.tilemap_data.props with sprite_url / collision / scale
+  // from the props table so the Phaser scene gets one self-contained
+  // list per render. Unknown props (kind not in DB) are dropped silently.
+  type TilemapProp = { kind: string; x: number; y: number };
+  type HydratedProp = TilemapProp & {
+    sprite_url: string;
+    collision: boolean;
+    display_scale: number;
+    metadata: Record<string, unknown>;
+  };
+  const tilemap = room.tilemap_data as { props?: TilemapProp[] } | null;
+  const hydratedProps: HydratedProp[] = (tilemap?.props ?? [])
+    .map((p) => {
+      const def = propsById.get(p.kind);
+      if (!def) return null;
+      return {
+        kind: p.kind,
+        x: p.x,
+        y: p.y,
+        sprite_url: def.sprite_url as string,
+        collision: def.collision as boolean,
+        display_scale: (def.display_scale as number) ?? 1.0,
+        metadata: (def.metadata as Record<string, unknown>) ?? {},
+      };
+    })
+    .filter((p): p is HydratedProp => p !== null);
 
   // Biome tileset.
   let biome: { id: string; tileset_url: string | null; tileset_metadata: unknown } | null = null;
@@ -232,6 +263,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
           unlock_requirement: c.unlock_requirement,
         })),
         npcs,
+        props: hydratedProps,
       },
     },
     {

@@ -47,20 +47,12 @@ type Job = {
 
 const JOBS: Job[] = [
   {
-    characterId: "2ca1249f-e7d5-4aa3-aa5a-3822492f3e3c",
+    characterId: "feb3d8f7-64b7-43b9-86a8-df5e20baf9d3",
     target: { table: "classes", id: "warrior" },
     entityId: "warrior",
-    label: "Camus warrior v4 chibi-detailed",
+    label: "Camus hero v5 chibi-nohelmet",
     prompt:
-      "true chibi RPG warrior knight in horned iron helmet and ornate dark iron plate armor with crimson trim, two-handed sword strapped on back, head_size 1.9, FF VI Pixel Remaster + Octopath Traveler aesthetic, detailed shading",
-  },
-  {
-    characterId: "e6c81059-1769-4a66-b89d-9851b6065517",
-    target: { table: "npcs", id: "cedric_the_broken" },
-    entityId: "cedric_the_broken",
-    label: "Cedric NPC v4 chibi-detailed",
-    prompt:
-      "true chibi pixel art ex-gladiator wielding blacksmith hammer, missing left arm, leather smithing apron over faded brown tunic, weathered face with grey beard, head_size 1.9, FF VI Pixel Remaster aesthetic, detailed shading",
+      "true chibi RPG hero adventurer — no helmet, short tousled black hair, simple leather travel tunic with crimson sash, FF VI Pixel Remaster + Octopath Traveler aesthetic, detailed shading",
   },
 ];
 
@@ -81,10 +73,21 @@ type ZipMeta = {
   };
 };
 
+type ExportMeta = {
+  /** Legacy (pre-states) shape kept at top level. */
+  frames?: ZipMeta["frames"];
+  /** Current "states" export — pick state[0] for single-character ZIPs. */
+  states?: Array<{ frames: ZipMeta["frames"] }>;
+};
+
 async function readMetadata(zip: JSZip): Promise<ZipMeta> {
   const file = zip.file("metadata.json");
   if (!file) throw new Error("metadata.json missing from ZIP");
-  return JSON.parse(await file.async("string")) as ZipMeta;
+  const raw = JSON.parse(await file.async("string")) as ExportMeta;
+  if (raw.frames) return { frames: raw.frames };
+  const first = raw.states?.[0];
+  if (first?.frames) return { frames: first.frames };
+  throw new Error("metadata.json: neither .frames nor .states[0].frames found");
 }
 
 async function readPng(zip: JSZip, path: string): Promise<Buffer> {

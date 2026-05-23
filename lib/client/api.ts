@@ -192,6 +192,16 @@ export type WangTilesetMeta = {
   tiles?: WangTileMeta[];
 };
 
+export type RoomProp = {
+  kind: string;
+  x: number;
+  y: number;
+  sprite_url: string;
+  collision: boolean;
+  display_scale: number;
+  metadata: Record<string, unknown>;
+};
+
 export type RoomState = {
   room: {
     id: string;
@@ -219,6 +229,7 @@ export type RoomState = {
   };
   connections: RoomConnectionRow[];
   npcs: RoomNpc[];
+  props: RoomProp[];
 };
 
 export type DialogueLine = {

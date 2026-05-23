@@ -17,14 +17,22 @@
 
 import Phaser from "phaser";
 
-import type { AnimationAtlas, Direction, RoomState } from "@/lib/client/api";
+import type { AnimationAtlas, Direction, RoomProp, RoomState } from "@/lib/client/api";
 import { buildTileIndexGrid, isWallCell } from "./wang";
 
 export const TILE_SIZE = 16;
 export const ZOOM = 3;
 const RENDERED_TILE = TILE_SIZE * ZOOM;
-const MOVE_COOLDOWN_MS = 180;
-const TURN_COOLDOWN_MS = 80;
+/**
+ * Step pacing. The cooldown is long enough that holding the D-pad does
+ * not "spam" half-a-dozen steps before the user can react. A short
+ * tween moves the sprite smoothly to the next tile inside that window
+ * — by the time the cooldown ends, the player has visibly arrived and
+ * can press again.
+ */
+const MOVE_COOLDOWN_MS = 260;
+const MOVE_TWEEN_MS = 220;
+const TURN_COOLDOWN_MS = 100;
 /**
  * v3 character canvases come back at 92×92 (real character ~55×41 inside
  * the padding). At 1× scale that's ~3 tiles tall — sprite would tower
@@ -52,15 +60,16 @@ const ALL_DIRECTIONS: Direction[] = ["south", "north", "east", "west"];
 type AnimState = "walk" | "idle";
 
 /**
- * Static map prop sprites generated through PixelLab and uploaded to R2.
- * Until we have a `props` table in the DB, hardcoding the URL keeps the
- * scene self-contained. When we add more (anvil, chest, spiral_stair),
- * we'll move this into a server-side table and ship it through the
- * /room endpoint.
+ * The original door arch is still used to mark every room exit. It's
+ * generated once per session and looked up by hardcoded URL; the rest
+ * of the prop catalogue (dragon, bridge, tree, portal) now travels in
+ * state.props with its own sprite URL.
  */
 const DOOR_SPRITE_URL =
   "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/a83a12cc6eabab1d40ff3403ce9515cbcb2d39aee30eeddc61134923fcf8cf31.png";
 const DOOR_TEXTURE_KEY = "prop-door-threshold";
+/** Map prop kind → Phaser texture key. Stable so re-renders reuse cache. */
+const propTextureKey = (kind: string) => `prop-${kind}`;
 
 export type SceneCallbacks = {
   onExitRequested?: (direction: Direction) => void;
@@ -80,6 +89,9 @@ export class AbyssScene extends Phaser.Scene {
    *  exit doors + halos, etc. Lifetimes are tied to the room render. */
   private roomDecor: Phaser.GameObjects.GameObject[] = [];
   private tilemap?: Phaser.Tilemaps.Tilemap;
+  /** Tile cells that block movement because a colliding prop sits on them.
+   *  Stored as "x,y" strings — checked in attemptMove alongside isWallCell. */
+  private propBlockers = new Set<string>();
   private playerTile = { x: 0, y: 0 };
   private playerDir: Direction = "south";
   private moveCooldownMs = 0;
@@ -191,6 +203,17 @@ export class AbyssScene extends Phaser.Scene {
     if (!this.textures.exists(DOOR_TEXTURE_KEY)) {
       this.load.image(DOOR_TEXTURE_KEY, DOOR_SPRITE_URL);
       queued.push(DOOR_TEXTURE_KEY);
+    }
+
+    // Map props (dragon, portal, bridge, tree, etc.) — server hydrates
+    // sprite_url for each, we load once per (kind) so revisiting a room
+    // hits the texture cache.
+    for (const prop of s.props ?? []) {
+      const key = propTextureKey(prop.kind);
+      if (!this.textures.exists(key)) {
+        this.load.image(key, prop.sprite_url);
+        queued.push(key);
+      }
     }
 
     for (const npc of s.npcs) {
@@ -384,6 +407,53 @@ export class AbyssScene extends Phaser.Scene {
     // We render the door over the exit tile itself (which is floor `.`
     // in the seed) so it visually "fills" the gap in the wall. A soft
     // pulsing halo behind the door draws the eye from across the map.
+    // Map props: paint each one over its tile with the right depth and
+    // build the per-tile blocker set so the player can't walk through
+    // dragons or trees. Portal kind also gets a slow rotating tween +
+    // halo so the player can tell it's the dimensional rift.
+    this.propBlockers.clear();
+    for (const prop of s.props ?? []) {
+      const key = propTextureKey(prop.kind);
+      if (!this.textures.exists(key)) continue;
+      const cx = prop.x * RENDERED_TILE + RENDERED_TILE / 2;
+      const cy = prop.y * RENDERED_TILE + RENDERED_TILE / 2;
+      const sprite = this.add
+        .image(cx, cy, key)
+        .setOrigin(0.5, 0.7)
+        .setScale(prop.display_scale ?? 1.0)
+        // Props with collision (dragon, tree) sit BELOW the player so
+        // the player can walk in front of them. Decorative passable
+        // props (portal, bridge) sit BELOW the player too — bridge so
+        // the player walks over the planks; portal so the body is
+        // visible standing in front of the swirl.
+        .setDepth(prop.kind === "cave_bridge_stone" ? 1 : 4);
+      this.roomDecor.push(sprite);
+      if (prop.collision) {
+        this.propBlockers.add(`${prop.x},${prop.y}`);
+      }
+      if (prop.kind === "portal_hyperdimensional") {
+        const halo = this.add
+          .circle(cx, cy, RENDERED_TILE * 0.9, 0x9d6cff, 0.32)
+          .setDepth(3);
+        this.roomDecor.push(halo);
+        this.tweens.add({
+          targets: halo,
+          alpha: { from: 0.5, to: 0.15 },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+        this.tweens.add({
+          targets: sprite,
+          angle: 360,
+          duration: 8000,
+          repeat: -1,
+          ease: "Linear",
+        });
+      }
+    }
+
     // Server-side connections are the source of truth. If the client's
     // cached tilemap_data has an exit cell that the server doesn't have
     // a connection for, we silently ignore it — no door, no exit
@@ -490,9 +560,6 @@ export class AbyssScene extends Phaser.Scene {
     const map = this.state.room.tilemap_data;
     if (!map) return;
 
-    // Update facing on every press — taps shouldn't require a separate
-    // "turn" step before moving. Pokemon-style turn-only behaviour was
-    // confusing on a D-pad where each tap is its own intent.
     if (this.playerDir !== dir) {
       this.setPlayerFacing(dir);
     }
@@ -502,37 +569,50 @@ export class AbyssScene extends Phaser.Scene {
     const nx = this.playerTile.x + dx;
     const ny = this.playerTile.y + dy;
 
-    // Exit detection: stepping ON the exit tile triggers transition.
-    // Only honour exits whose direction has a real DB connection, so a
-    // stale client-side tilemap can't trigger a server-side NO_EXIT 409.
-    const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
-    for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
-      if (!exit) continue;
-      if (!validExitDirs.has(exitDirRaw as Direction)) continue;
-      if (nx === exit.x && ny === exit.y) {
-        this.callbacks.onExitRequested?.(exitDirRaw as Direction);
-        this.moveCooldownMs = 600;
-        return;
-      }
-    }
-
-    // Wall — already turned. Bumping into a wall is "not moving"; let the
-    // sprite settle into idle so we don't show a walk cycle while stuck.
-    if (isWallCell(map, nx, ny)) {
+    if (isWallCell(map, nx, ny) || this.propBlockers.has(`${nx},${ny}`)) {
       this.moveCooldownMs = TURN_COOLDOWN_MS;
       this.setPlayerAnimState("idle");
       return;
     }
 
-    // Free tile — commit the step.
+    // Commit the step. Move via tween so each tile transition is
+    // visibly deliberate instead of a teleport — combined with the
+    // longer MOVE_COOLDOWN_MS this gives the "cuadro en cuadro" feel.
     this.playerTile = { x: nx, y: ny };
+    const targetX = nx * RENDERED_TILE + RENDERED_TILE / 2;
+    const targetY = ny * RENDERED_TILE + RENDERED_TILE / 2;
     if (this.player) {
-      this.player.x = nx * RENDERED_TILE + RENDERED_TILE / 2;
-      this.player.y = ny * RENDERED_TILE + RENDERED_TILE / 2;
+      this.tweens.add({
+        targets: this.player,
+        x: targetX,
+        y: targetY,
+        duration: MOVE_TWEEN_MS,
+        ease: "Linear",
+      });
     }
     this.setPlayerAnimState("walk");
     this.moveCooldownMs = MOVE_COOLDOWN_MS;
     this.checkNpcAdjacency();
+
+    // Exit trigger fires AFTER stepping ONTO the exit tile, not before.
+    // This matches the user-facing model "cruzar al tocar la puerta":
+    // the player arrives at the door (sprite reaches the tile), then
+    // the room transition kicks in. We also gate by state.connections
+    // so a stale client tilemap can't drive a 409.
+    const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
+    for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
+      if (!exit) continue;
+      if (!validExitDirs.has(exitDirRaw as Direction)) continue;
+      if (this.playerTile.x === exit.x && this.playerTile.y === exit.y) {
+        // Wait for the move tween to finish before triggering so the
+        // sprite is visibly on the door tile when the transition fires.
+        this.moveCooldownMs = 800;
+        this.time.delayedCall(MOVE_TWEEN_MS + 40, () => {
+          this.callbacks.onExitRequested?.(exitDirRaw as Direction);
+        });
+        return;
+      }
+    }
   }
 
   private checkNpcAdjacency() {
