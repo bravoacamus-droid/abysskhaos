@@ -135,7 +135,14 @@ export class AbyssScene extends Phaser.Scene {
     this.state = newState;
     this.adjacentNpcId = null;
     this.virtualDir = null;
-    this.moveCooldownMs = 0;
+    // Do NOT reset moveCooldownMs to 0. The exit trigger set it to
+    // 1000ms; if we wipe it the user holding a keyboard arrow (which
+    // ignores virtualDir clearing) auto-steps the moment the new
+    // room renders, looking like "I crossed the door and walked
+    // past the entry tile". Carry the cooldown over, then clamp to
+    // at least 250ms so even a stale carry-over still demands a
+    // beat before the next move.
+    this.moveCooldownMs = Math.max(this.moveCooldownMs, 250);
     this.tearDownRoom();
     // Force-clear the React-side adjacent NPC HUD. checkNpcAdjacency below
     // only fires the callback on transition (adj !== this.adjacentNpcId),

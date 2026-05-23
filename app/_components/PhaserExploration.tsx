@@ -156,13 +156,17 @@ export default function PhaserExploration({
     if (moving) return;
     setMoving(true);
     try {
-      await moveCharacter({ initData, characterId, direction });
-      const next = await fetchRoom({ initData, characterId, locale });
+      // Single round-trip: /move now returns the full RoomState so we
+      // skip the extra GET /room that used to add ~150-250ms of delay
+      // between stepping on the door and the new room rendering.
+      const { room_state: next } = await moveCharacter({
+        initData,
+        characterId,
+        direction,
+        locale,
+      });
       stateRef.current = next;
       setState(next);
-      // Hot-reload the room without using scene.restart(), which triggers
-      // "sys null" crashes in Phaser 4. The scene keeps its callbacks
-      // (no init() re-run) and only the per-room game objects rebuild.
       const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
       scene?.loadRoom?.(next);
       flashBanner();

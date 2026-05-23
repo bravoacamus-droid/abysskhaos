@@ -260,11 +260,11 @@ export function fetchRoom(opts: FetchOpts & { characterId: string; locale: strin
 }
 
 export function moveCharacter(
-  opts: FetchOpts & { characterId: string; direction: Direction },
-): Promise<{ current_room_id: string; current_floor: number }> {
+  opts: FetchOpts & { characterId: string; direction: Direction; locale: string },
+): Promise<{ current_room_id: string; current_floor: number; room_state: RoomState }> {
   return call(`/api/v1/characters/${opts.characterId}/move`, "POST", {
     initData: opts.initData,
-    body: { direction: opts.direction },
+    body: { direction: opts.direction, locale: opts.locale },
     signal: opts.signal,
   });
 }
