@@ -124,9 +124,11 @@ const TILEMAPS: Record<string, TilemapData> = {
       { kind: "cave_tree", x: 10, y: 8 },
     ],
   },
-  // The Underground River — horizontal river of wall tiles bisects the
-  // room; a single bridge tile (col 6, row 5) is the only passable cell.
-  // Bridge prop sits on top of that tile so the player visibly crosses.
+  // The Underground River — horizontal river bisects the room. The
+  // single bridge tile (col 6, row 5) is the only passable cell.
+  // River props are stamped on every wall tile of row 5 (except the
+  // bridge col) so the player visibly sees cyan water flowing under
+  // their feet as they cross.
   f100_r02: {
     width: 13,
     height: 11,
@@ -146,6 +148,18 @@ const TILEMAPS: Record<string, TilemapData> = {
     spawn: { x: 6, y: 9 },
     exits: { north: { x: 6, y: 0 }, south: { x: 6, y: 10 } },
     props: [
+      // River segments — 11 visual tiles cover cols 1–11 of row 5,
+      // bridge prop sits on top of col 6.
+      { kind: "cave_river", x: 1, y: 5 },
+      { kind: "cave_river", x: 2, y: 5 },
+      { kind: "cave_river", x: 3, y: 5 },
+      { kind: "cave_river", x: 4, y: 5 },
+      { kind: "cave_river", x: 5, y: 5 },
+      { kind: "cave_river", x: 7, y: 5 },
+      { kind: "cave_river", x: 8, y: 5 },
+      { kind: "cave_river", x: 9, y: 5 },
+      { kind: "cave_river", x: 10, y: 5 },
+      { kind: "cave_river", x: 11, y: 5 },
       { kind: "cave_bridge_stone", x: 6, y: 5 },
       { kind: "cave_tree", x: 2, y: 2 },
       { kind: "cave_tree", x: 10, y: 8 },

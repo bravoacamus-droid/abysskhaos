@@ -17,7 +17,7 @@
 
 import Phaser from "phaser";
 
-import type { AnimationAtlas, Direction, RoomProp, RoomState } from "@/lib/client/api";
+import type { AnimationAtlas, Direction, RoomState } from "@/lib/client/api";
 import { buildTileIndexGrid, isWallCell } from "./wang";
 
 export const TILE_SIZE = 16;
@@ -480,10 +480,17 @@ export class AbyssScene extends Phaser.Scene {
       const obj = useSprite
         ? this.add.sprite(cx, cy, key)
         : this.add.image(cx, cy, key);
+      // Per-prop anchor: the bridge sits flat across its tile so the
+      // sprite is centered on (0.5, 0.5); tall world objects (trees,
+      // dragon, portal) anchor at (0.5, 0.7) so the base of the sprite
+      // is roughly on the tile while the body rises upward.
+      const isFlat = prop.kind === "cave_bridge_stone" || prop.kind === "cave_river";
       obj
-        .setOrigin(0.5, 0.7)
+        .setOrigin(0.5, isFlat ? 0.5 : 0.7)
         .setScale(prop.display_scale ?? 1.0)
-        .setDepth(prop.kind === "cave_bridge_stone" ? 1 : 4);
+        // Bridge + river sit BELOW the player (depth 1) so the player
+        // walks over them. Trees, dragon, portal are at depth 4.
+        .setDepth(isFlat ? 1 : 4);
       this.roomDecor.push(obj);
       if (prop.collision) {
         this.propBlockers.add(`${prop.x},${prop.y}`);
@@ -647,13 +654,15 @@ export class AbyssScene extends Phaser.Scene {
       return;
     }
 
-    // Commit the step. Move via tween so each tile transition is
-    // visibly deliberate instead of a teleport — combined with the
-    // longer MOVE_COOLDOWN_MS this gives the "cuadro en cuadro" feel.
+    // Commit the step. Tween smoothly to the destination tile so the
+    // step is visibly deliberate, but kill any prior tween on the
+    // player first so consecutive presses don't stack/fight and snap
+    // the sprite back to an earlier position.
     this.playerTile = { x: nx, y: ny };
     const targetX = nx * RENDERED_TILE + RENDERED_TILE / 2;
     const targetY = ny * RENDERED_TILE + RENDERED_TILE / 2;
     if (this.player) {
+      this.tweens.killTweensOf(this.player);
       this.tweens.add({
         targets: this.player,
         x: targetX,
@@ -666,22 +675,20 @@ export class AbyssScene extends Phaser.Scene {
     this.moveCooldownMs = MOVE_COOLDOWN_MS;
     this.checkNpcAdjacency();
 
-    // Exit trigger fires AFTER stepping ONTO the exit tile, not before.
-    // This matches the user-facing model "cruzar al tocar la puerta":
-    // the player arrives at the door (sprite reaches the tile), then
-    // the room transition kicks in. We also gate by state.connections
-    // so a stale client tilemap can't drive a 409.
+    // Exit trigger: fire IMMEDIATELY when the player steps onto an
+    // exit tile, so the transition feels like a tap-through. The
+    // tween continues so the sprite still visibly arrives at the
+    // door, but the network call goes out in parallel — by the time
+    // the next room renders, the player is already on the door.
+    // Lock the cooldown out for a full second to prevent any extra
+    // step queueing up while doMove() is in flight.
     const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
     for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
       if (!exit) continue;
       if (!validExitDirs.has(exitDirRaw as Direction)) continue;
       if (this.playerTile.x === exit.x && this.playerTile.y === exit.y) {
-        // Wait for the move tween to finish before triggering so the
-        // sprite is visibly on the door tile when the transition fires.
-        this.moveCooldownMs = 800;
-        this.time.delayedCall(MOVE_TWEEN_MS + 40, () => {
-          this.callbacks.onExitRequested?.(exitDirRaw as Direction);
-        });
+        this.moveCooldownMs = 1000;
+        this.callbacks.onExitRequested?.(exitDirRaw as Direction);
         return;
       }
     }
