@@ -31,7 +31,7 @@ const RENDERED_TILE = TILE_SIZE * ZOOM;
  * can press again.
  */
 const MOVE_COOLDOWN_MS = 260;
-const MOVE_TWEEN_MS = 220;
+export const MOVE_TWEEN_MS = 220;
 const TURN_COOLDOWN_MS = 100;
 /**
  * v3 character canvases come back at 92×92 (real character ~55×41 inside
@@ -691,52 +691,37 @@ export class AbyssScene extends Phaser.Scene {
       return;
     }
 
-    // Commit the step.
+    // Commit the step — always with the same smooth slide tween so the
+    // exit step doesn't read as a sudden jump versus normal steps.
     this.playerTile = { x: nx, y: ny };
     const targetX = nx * RENDERED_TILE + RENDERED_TILE / 2;
     const targetY = ny * RENDERED_TILE + RENDERED_TILE / 2;
-
-    // Is this step landing on an exit? If yes we skip the slide tween
-    // and snap the sprite onto the door tile so the room transition
-    // can fire while the player is visibly at the door — without this,
-    // the 220ms tween got interrupted mid-slide by the room load,
-    // showing a "half step then teleport" jump that read as glitchy.
-    const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
-    let landedOnExit: Direction | null = null;
-    for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
-      if (!exit) continue;
-      if (!validExitDirs.has(exitDirRaw as Direction)) continue;
-      if (this.playerTile.x === exit.x && this.playerTile.y === exit.y) {
-        landedOnExit = exitDirRaw as Direction;
-        break;
-      }
-    }
-
     if (this.player) {
       this.tweens.killTweensOf(this.player);
-      if (landedOnExit) {
-        // Snap to the door, no slide.
-        this.player.x = targetX;
-        this.player.y = targetY;
-      } else {
-        this.tweens.add({
-          targets: this.player,
-          x: targetX,
-          y: targetY,
-          duration: MOVE_TWEEN_MS,
-          ease: "Linear",
-        });
-      }
+      this.tweens.add({
+        targets: this.player,
+        x: targetX,
+        y: targetY,
+        duration: MOVE_TWEEN_MS,
+        ease: "Linear",
+      });
     }
     this.setPlayerAnimState("walk");
     this.checkNpcAdjacency();
 
-    if (landedOnExit) {
-      // Lock movement until loadRoom heals state. 1s is generous;
-      // loadRoom will further clamp via Math.max(current, 250).
-      this.moveCooldownMs = 1000;
-      this.callbacks.onExitRequested?.(landedOnExit);
-      return;
+    // Did we land on an exit tile? If so, fire the transition trigger.
+    // React-side doMove awaits at least MOVE_TWEEN_MS before calling
+    // loadRoom, so the tween completes (player visibly arrives at the
+    // door) before the new room paints — no more half-step + teleport.
+    const validExitDirs = new Set(this.state.connections.map((c) => c.direction));
+    for (const [exitDirRaw, exit] of Object.entries(map.exits)) {
+      if (!exit) continue;
+      if (!validExitDirs.has(exitDirRaw as Direction)) continue;
+      if (this.playerTile.x === exit.x && this.playerTile.y === exit.y) {
+        this.moveCooldownMs = 1000;
+        this.callbacks.onExitRequested?.(exitDirRaw as Direction);
+        return;
+      }
     }
     this.moveCooldownMs = MOVE_COOLDOWN_MS;
   }

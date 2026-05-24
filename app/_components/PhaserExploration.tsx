@@ -156,15 +156,21 @@ export default function PhaserExploration({
     if (moving) return;
     setMoving(true);
     try {
-      // Single round-trip: /move now returns the full RoomState so we
-      // skip the extra GET /room that used to add ~150-250ms of delay
-      // between stepping on the door and the new room rendering.
-      const { room_state: next } = await moveCharacter({
-        initData,
-        characterId,
-        direction,
-        locale,
-      });
+      // Run the network call and the move-tween "minimum visible time"
+      // in parallel. The tween starts the moment the user presses the
+      // direction; loadRoom should only fire after it finishes so the
+      // sprite is visibly on the door before the next room appears.
+      // - Network fast (cached props): wait for the tween to finish.
+      // - Network slow (cold room): tween long-done; render as soon as
+      //   data lands.
+      // Total feel: smooth slide → next room. No "half-step interrupt",
+      // no "snap teleport".
+      const TWEEN_HOLD_MS = 240;
+      const [moveResp] = await Promise.all([
+        moveCharacter({ initData, characterId, direction, locale }),
+        new Promise<void>((resolve) => window.setTimeout(resolve, TWEEN_HOLD_MS)),
+      ]);
+      const next = moveResp.room_state;
       stateRef.current = next;
       setState(next);
       const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
