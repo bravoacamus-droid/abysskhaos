@@ -398,7 +398,10 @@ export class AbyssScene extends Phaser.Scene {
 
     const mapPxW = map.width * RENDERED_TILE;
     const mapPxH = map.height * RENDERED_TILE;
-    this.cameras.main.setBackgroundColor("#06070C");
+    // Cave-tone background plugs any transparency in the bg tile sprite
+    // — used to be near-black (#06070C) which showed through as a black
+    // strip between the playable map and the cave wall halo.
+    this.cameras.main.setBackgroundColor("#10131a");
 
     // Extend the cave visually beyond the walkable map so portrait phones
     // don't see a black void around small rooms. We carve a single
@@ -407,21 +410,15 @@ export class AbyssScene extends Phaser.Scene {
     // camera bounds are widened to include this halo so the bg can
     // actually be on-screen — collision still keeps the player inside
     // the original mapPxW × mapPxH.
-    // Cave halo: a SOLID DARK fill covers the full halo area, then the
-    // tileable mineral PNG paints on top. The solid fill plugs any
-    // transparent pixels in the tiled PNG so the user never sees the
-    // camera's #06070C through the cracks — eliminates the "black
-    // strips" between the playable map and the cave wall pattern.
+    // Cave halo: tileable mineral PNG painted around the playable map.
+    // The camera's background colour (set above to #10131a) plugs any
+    // transparent pixels in the tiled PNG so the user never sees
+    // black between the map edge and the cave wall pattern.
     const BG_HALO_PX = 1200;
     const haloX = -BG_HALO_PX;
     const haloY = -BG_HALO_PX;
     const haloW = mapPxW + BG_HALO_PX * 2;
     const haloH = mapPxH + BG_HALO_PX * 2;
-    const darkFill = this.add
-      .rectangle(haloX, haloY, haloW, haloH, 0x10131a)
-      .setOrigin(0, 0)
-      .setDepth(-11);
-    this.roomDecor.push(darkFill);
     if (this.textures.exists("bg-tile")) {
       const bgSprite = this.add
         .tileSprite(haloX, haloY, haloW, haloH, "bg-tile")
@@ -457,6 +454,12 @@ export class AbyssScene extends Phaser.Scene {
       // smooths step-snapping so the camera glides instead of jumping.
       this.cameras.main.startFollow(this.player, true, 0.18, 0.18);
     }
+
+    // Reset blockers ONCE before populating from NPCs + props, so they
+    // accumulate together. Previously the props loop cleared *after*
+    // the NPC loop had populated it, wiping Cedric/Ozyel out of the
+    // blocker set and making them walk-through-able again.
+    this.propBlockers.clear();
 
     for (const npc of s.npcs) {
       if (npc.tile_x === null || npc.tile_y === null) continue;
@@ -499,10 +502,8 @@ export class AbyssScene extends Phaser.Scene {
     // in the seed) so it visually "fills" the gap in the wall. A soft
     // pulsing halo behind the door draws the eye from across the map.
     // Map props: paint each one over its tile with the right depth and
-    // build the per-tile blocker set so the player can't walk through
-    // dragons or trees. Portal kind also gets a slow rotating tween +
-    // halo so the player can tell it's the dimensional rift.
-    this.propBlockers.clear();
+    // add collidable ones to the blocker set (already cleared+populated
+    // by the NPC loop above; we just append here).
     for (const prop of s.props ?? []) {
       const key = propTextureKey(prop.kind);
       if (!this.textures.exists(key)) continue;
