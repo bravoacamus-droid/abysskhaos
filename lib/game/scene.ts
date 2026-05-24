@@ -407,37 +407,33 @@ export class AbyssScene extends Phaser.Scene {
     // camera bounds are widened to include this halo so the bg can
     // actually be on-screen — collision still keeps the player inside
     // the original mapPxW × mapPxH.
-    // Cave halo: tile the bg sprite (PixelLab mineral wall) across a
-    // big area around the playable map so portrait viewports see cave
-    // continuing beyond the room edge instead of black void. The bg
-    // URL comes from the server (props table → role:background) so
-    // each biome can ship its own bg without code changes.
+    // Cave halo: a SOLID DARK fill covers the full halo area, then the
+    // tileable mineral PNG paints on top. The solid fill plugs any
+    // transparent pixels in the tiled PNG so the user never sees the
+    // camera's #06070C through the cracks — eliminates the "black
+    // strips" between the playable map and the cave wall pattern.
     const BG_HALO_PX = 1200;
+    const haloX = -BG_HALO_PX;
+    const haloY = -BG_HALO_PX;
+    const haloW = mapPxW + BG_HALO_PX * 2;
+    const haloH = mapPxH + BG_HALO_PX * 2;
+    const darkFill = this.add
+      .rectangle(haloX, haloY, haloW, haloH, 0x10131a)
+      .setOrigin(0, 0)
+      .setDepth(-11);
+    this.roomDecor.push(darkFill);
     if (this.textures.exists("bg-tile")) {
       const bgSprite = this.add
-        .tileSprite(
-          -BG_HALO_PX,
-          -BG_HALO_PX,
-          mapPxW + BG_HALO_PX * 2,
-          mapPxH + BG_HALO_PX * 2,
-          "bg-tile",
-        )
+        .tileSprite(haloX, haloY, haloW, haloH, "bg-tile")
         .setOrigin(0, 0)
         .setDepth(-10)
-        // Source tile is 128 px; scale 0.5 makes each rendered tile
-        // 64 px = ~2 game tiles, dense enough that mineral detail
-        // reads without one giant texture dominating the view.
+        // Source tile is 128 (v1) or 256 px (v2). 0.5 brings each
+        // tile repetition to ~half its source size so mineral detail
+        // reads at the natural scale of the player sprite.
         .setTileScale(0.5, 0.5);
       this.roomDecor.push(bgSprite);
-      this.cameras.main.setBounds(
-        -BG_HALO_PX,
-        -BG_HALO_PX,
-        mapPxW + BG_HALO_PX * 2,
-        mapPxH + BG_HALO_PX * 2,
-      );
-    } else {
-      this.cameras.main.setBounds(0, 0, mapPxW, mapPxH);
     }
+    this.cameras.main.setBounds(haloX, haloY, haloW, haloH);
     this.cameras.main.centerOn(mapPxW / 2, mapPxH / 2);
 
     this.playerTile = { ...map.spawn };
@@ -474,12 +470,19 @@ export class AbyssScene extends Phaser.Scene {
       const npcX = npc.tile_x * RENDERED_TILE + RENDERED_TILE / 2;
       const npcY = npc.tile_y * RENDERED_TILE + RENDERED_TILE / 2;
       if (!this.textures.exists(key)) {
-        console.warn(`[abyss/scene] NPC texture missing for ${npc.id}; key=${key} url=${npc.sprite_atlas?.south ?? "(none)"}`);
-        const placeholder = this.add
-          .rectangle(npcX, npcY - RENDERED_TILE / 4, RENDERED_TILE - 4, RENDERED_TILE - 4, 0xff5252, 0.85)
-          .setStrokeStyle(2, 0xffffff)
-          .setDepth(5);
-        this.roomDecor.push(placeholder);
+        // Skip the red placeholder when the NPC intentionally has no
+        // sprite_atlas (e.g. Ozyel — his body is the dragon prop).
+        // The placeholder is a debug aid for the "missing texture"
+        // case, where sprite_atlas IS set but the URL failed to load.
+        const hasIntendedAtlas = npc.sprite_atlas && Object.values(npc.sprite_atlas).some(Boolean);
+        if (hasIntendedAtlas) {
+          console.warn(`[abyss/scene] NPC texture missing for ${npc.id}; key=${key} url=${npc.sprite_atlas?.south ?? "(none)"}`);
+          const placeholder = this.add
+            .rectangle(npcX, npcY - RENDERED_TILE / 4, RENDERED_TILE - 4, RENDERED_TILE - 4, 0xff5252, 0.85)
+            .setStrokeStyle(2, 0xffffff)
+            .setDepth(5);
+          this.roomDecor.push(placeholder);
+        }
         continue;
       }
       const sprite = this.add.sprite(npcX, npcY, key);
