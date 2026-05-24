@@ -103,6 +103,14 @@ export async function buildRoomStateForCharacter(
   const propRows = propsRes.data ?? [];
   const propsById = new Map(propRows.map((p) => [p.id as string, p]));
 
+  // A prop tagged metadata.role === "background" is used as the
+  // tileable halo around the playable area (the dark cave wall the
+  // player sees beyond the map). One per biome by convention.
+  const backgroundProp = propRows.find(
+    (p) => (p.metadata as { role?: string } | null)?.role === "background",
+  );
+  const backgroundTileUrl = (backgroundProp?.sprite_url as string | undefined) ?? null;
+
   type HydratedProp = TilemapProp & {
     sprite_url: string;
     collision: boolean;
@@ -288,6 +296,7 @@ export async function buildRoomStateForCharacter(
       })),
       npcs,
       props: hydratedProps,
+      background_tile_url: backgroundTileUrl,
     },
   };
 }

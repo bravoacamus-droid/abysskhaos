@@ -204,49 +204,107 @@ const NPC_PLACEMENTS: Array<{ roomSlug: string; npcId: string; tileX: number; ti
   // toward the exit. Spawn is at (6, 2); Cedric at (6, 5) is reachable
   // in 3 steps and visible immediately.
   { roomSlug: "f100_r01", npcId: "cedric_the_broken", tileX: 6, tileY: 5 },
+  // Ozyel shares the dragon prop's tile in r03 (Guardian's Chamber). He
+  // has no sprite of his own — the dragon prop is his body. The NPC
+  // entry exists so adjacency triggers the talk HUD and his dialogue.
+  { roomSlug: "f100_r03", npcId: "ozyel_the_guardian", tileX: 6, tileY: 4 },
 ];
 
 // -----------------------------------------------------------------------------
-// Cedric's first-meet dialogue.
+// NPC first-meet dialogues. Each entry becomes one row in npc_dialogues
+// plus N rows in npc_dialogue_lines (+ ES translations).
 // -----------------------------------------------------------------------------
 
-const CEDRIC_FIRST_MEET = {
-  npc_id: "cedric_the_broken",
-  dialogue_key: "first_meet",
-  is_default_first: true,
-  lines: [
-    {
-      seq: 1,
-      speaker: "narrator" as const,
-      text: "The man at the anvil looks up. His left arm ends at the elbow; the right is wrapped in soot-black bandages.",
-      es: "El hombre del yunque alza la vista. Su brazo izquierdo termina en el codo; el derecho está envuelto en vendas negras de hollín.",
-    },
-    {
-      seq: 2,
-      speaker: "npc" as const,
-      text: "Another soul. The Architect's net is wide. They named me Cedric, when I had a body worth naming.",
-      es: "Otra alma. La red del Arquitecto es ancha. Me llamaban Cedric, cuando tenía un cuerpo digno de un nombre.",
-    },
-    {
-      seq: 3,
-      speaker: "npc" as const,
-      text: "This is Floor 100 — the Threshold. The shallow end. Below it the abyss does not forgive ignorance.",
-      es: "Esto es el Piso 100 — el Umbral. El extremo poco profundo. Más abajo, el abismo no perdona la ignorancia.",
-    },
-    {
-      seq: 4,
-      speaker: "npc" as const,
-      text: "Walk the corridor. Listen to what stirs. When you have seen enough, descend the spiral. I will still be here.",
-      es: "Recorre el pasillo. Escucha lo que se mueve. Cuando hayas visto suficiente, baja la espiral. Yo seguiré aquí.",
-    },
-    {
-      seq: 5,
-      speaker: "narrator" as const,
-      text: "He turns back to the anvil. The hammer falls — once, twice — and a small ember lifts off the iron and dies in the air.",
-      es: "Se gira de nuevo al yunque. El martillo cae — una, dos veces — y una pequeña brasa se eleva del hierro y muere en el aire.",
-    },
-  ],
+type DialogueLineSeed = { seq: number; speaker: "narrator" | "npc" | "choice"; text: string; es: string };
+type DialogueSeed = {
+  npc_id: string;
+  dialogue_key: string;
+  is_default_first: boolean;
+  lines: DialogueLineSeed[];
 };
+
+const DIALOGUES: DialogueSeed[] = [
+  {
+    npc_id: "cedric_the_broken",
+    dialogue_key: "first_meet",
+    is_default_first: true,
+    lines: [
+      {
+        seq: 1,
+        speaker: "narrator",
+        text: "The man at the anvil looks up. His left arm ends at the elbow; the right is wrapped in soot-black bandages.",
+        es: "El hombre del yunque alza la vista. Su brazo izquierdo termina en el codo; el derecho está envuelto en vendas negras de hollín.",
+      },
+      {
+        seq: 2,
+        speaker: "npc",
+        text: "Another soul. The Architect's net is wide. They named me Cedric, when I had a body worth naming.",
+        es: "Otra alma. La red del Arquitecto es ancha. Me llamaban Cedric, cuando tenía un cuerpo digno de un nombre.",
+      },
+      {
+        seq: 3,
+        speaker: "npc",
+        text: "This is Floor 100 — the Threshold. The shallow end. Below it the abyss does not forgive ignorance.",
+        es: "Esto es el Piso 100 — el Umbral. El extremo poco profundo. Más abajo, el abismo no perdona la ignorancia.",
+      },
+      {
+        seq: 4,
+        speaker: "npc",
+        text: "Walk the corridor. Listen to what stirs. When you have seen enough, descend the spiral. I will still be here.",
+        es: "Recorre el pasillo. Escucha lo que se mueve. Cuando hayas visto suficiente, baja la espiral. Yo seguiré aquí.",
+      },
+      {
+        seq: 5,
+        speaker: "narrator",
+        text: "He turns back to the anvil. The hammer falls — once, twice — and a small ember lifts off the iron and dies in the air.",
+        es: "Se gira de nuevo al yunque. El martillo cae — una, dos veces — y una pequeña brasa se eleva del hierro y muere en el aire.",
+      },
+    ],
+  },
+  {
+    npc_id: "ozyel_the_guardian",
+    dialogue_key: "first_meet",
+    is_default_first: true,
+    lines: [
+      {
+        seq: 1,
+        speaker: "narrator",
+        text: "The colossal white dragon stirs. Its outstretched wings hum faintly, and twin pools of cyan light open where eyes should be.",
+        es: "El colosal dragón blanco se agita. Sus alas extendidas zumban levemente, y dos pozos de luz cian se abren donde deberían estar los ojos.",
+      },
+      {
+        seq: 2,
+        speaker: "npc",
+        text: "I am Ozyel. I see threads, traveler — yours has not yet begun.",
+        es: "Soy Ozyel. Veo hilos, viajero — el tuyo aún no ha comenzado.",
+      },
+      {
+        seq: 3,
+        speaker: "npc",
+        text: "Beyond the portal sleeps the Labyrinth. Its halls drink memory and return only what they choose.",
+        es: "Más allá del portal duerme el Laberinto. Sus pasillos beben memoria y devuelven solo lo que escogen.",
+      },
+      {
+        seq: 4,
+        speaker: "npc",
+        text: "You will descend. You will be tested. And what walks out will not be exactly what walked in.",
+        es: "Descenderás. Serás probado. Y lo que salga no será exactamente lo que entró.",
+      },
+      {
+        seq: 5,
+        speaker: "npc",
+        text: "When the maze releases you, find me again. There are things only the broken can teach.",
+        es: "Cuando el laberinto te libere, vuelve a buscarme. Hay cosas que solo los rotos pueden enseñar.",
+      },
+      {
+        seq: 6,
+        speaker: "narrator",
+        text: "Ozyel closes its eyes. The portal beside it pulses, eager, hungry. Step in when you are ready.",
+        es: "Ozyel cierra los ojos. El portal a su lado palpita, ansioso, hambriento. Cruza cuando estés listo.",
+      },
+    ],
+  },
+];
 
 // -----------------------------------------------------------------------------
 // Seed runner — idempotent.
@@ -388,79 +446,89 @@ export async function seedPhase3Tutorial(client: SupabaseClient): Promise<SeedRe
   if (rnErr) throw new Error(`upsert room_npcs: ${rnErr.message}`);
   reports.push({ table: "room_npcs", rows: npcRows.length, translations: 0 });
 
-  // 4. Dialogue (npc_dialogues + npc_dialogue_lines + ES translations).
-  const { data: existingDlg, error: dlgSelErr } = await client
-    .from("npc_dialogues")
-    .select("id")
-    .eq("npc_id", CEDRIC_FIRST_MEET.npc_id)
-    .eq("dialogue_key", CEDRIC_FIRST_MEET.dialogue_key)
-    .maybeSingle();
-  if (dlgSelErr) throw new Error(`select npc_dialogues: ${dlgSelErr.message}`);
-
-  let dialogueId: string;
-  if (existingDlg) {
-    dialogueId = existingDlg.id as string;
-  } else {
-    const { data: insDlg, error: insDlgErr } = await client
+  // 4. Dialogues (npc_dialogues + npc_dialogue_lines + ES translations).
+  // Each DIALOGUES entry: upsert the dialogue row, replace its lines,
+  // refresh ES translations. Lines are delete-then-insert because their
+  // ids depend on insertion order and changing the count/order shouldn't
+  // leave dangling rows.
+  let dialoguesUpserted = 0;
+  let linesInserted = 0;
+  let lineTranslationsInserted = 0;
+  for (const dlg of DIALOGUES) {
+    const { data: existingDlg, error: dlgSelErr } = await client
       .from("npc_dialogues")
-      .insert({
-        npc_id: CEDRIC_FIRST_MEET.npc_id,
-        dialogue_key: CEDRIC_FIRST_MEET.dialogue_key,
-        is_default_first: CEDRIC_FIRST_MEET.is_default_first,
-      })
       .select("id")
-      .single();
-    if (insDlgErr) throw new Error(`insert npc_dialogues: ${insDlgErr.message}`);
-    dialogueId = (insDlg as { id: string }).id;
-  }
-  reports.push({ table: "npc_dialogues", rows: 1, translations: 0 });
+      .eq("npc_id", dlg.npc_id)
+      .eq("dialogue_key", dlg.dialogue_key)
+      .maybeSingle();
+    if (dlgSelErr) throw new Error(`select npc_dialogues: ${dlgSelErr.message}`);
 
-  // For lines, replace-all is the simplest stable behaviour (we re-insert
-  // the canonical sequence and re-key translations). Delete then insert.
-  const { error: delLinesErr } = await client
-    .from("npc_dialogue_lines")
-    .delete()
-    .eq("dialogue_id", dialogueId);
-  if (delLinesErr) throw new Error(`delete npc_dialogue_lines: ${delLinesErr.message}`);
+    let dialogueId: string;
+    if (existingDlg) {
+      dialogueId = existingDlg.id as string;
+    } else {
+      const { data: insDlg, error: insDlgErr } = await client
+        .from("npc_dialogues")
+        .insert({
+          npc_id: dlg.npc_id,
+          dialogue_key: dlg.dialogue_key,
+          is_default_first: dlg.is_default_first,
+        })
+        .select("id")
+        .single();
+      if (insDlgErr) throw new Error(`insert npc_dialogues: ${insDlgErr.message}`);
+      dialogueId = (insDlg as { id: string }).id;
+    }
+    dialoguesUpserted += 1;
 
-  const lineRows = CEDRIC_FIRST_MEET.lines.map((l) => ({
-    dialogue_id: dialogueId,
-    sequence_index: l.seq,
-    speaker: l.speaker,
-    text: l.text,
-  }));
-  const { data: insLines, error: insLinesErr } = await client
-    .from("npc_dialogue_lines")
-    .insert(lineRows)
-    .select("id, sequence_index");
-  if (insLinesErr) throw new Error(`insert npc_dialogue_lines: ${insLinesErr.message}`);
-  const seqToId = new Map<number, string>();
-  for (const row of (insLines ?? []) as { id: string; sequence_index: number }[]) {
-    seqToId.set(row.sequence_index, row.id);
-  }
+    const { error: delLinesErr } = await client
+      .from("npc_dialogue_lines")
+      .delete()
+      .eq("dialogue_id", dialogueId);
+    if (delLinesErr) throw new Error(`delete npc_dialogue_lines: ${delLinesErr.message}`);
 
-  const lineTranslations: TranslationRow[] = [];
-  for (const l of CEDRIC_FIRST_MEET.lines) {
-    const id = seqToId.get(l.seq);
-    if (!id) continue;
-    lineTranslations.push({
-      entity_type: "npc_dialogue_line",
-      entity_id: id,
-      locale: "es",
-      field: "text",
-      value: l.es,
-    });
+    const lineRows = dlg.lines.map((l) => ({
+      dialogue_id: dialogueId,
+      sequence_index: l.seq,
+      speaker: l.speaker,
+      text: l.text,
+    }));
+    const { data: insLines, error: insLinesErr } = await client
+      .from("npc_dialogue_lines")
+      .insert(lineRows)
+      .select("id, sequence_index");
+    if (insLinesErr) throw new Error(`insert npc_dialogue_lines: ${insLinesErr.message}`);
+    linesInserted += lineRows.length;
+    const seqToId = new Map<number, string>();
+    for (const row of (insLines ?? []) as { id: string; sequence_index: number }[]) {
+      seqToId.set(row.sequence_index, row.id);
+    }
+
+    const lineTranslations: TranslationRow[] = [];
+    for (const l of dlg.lines) {
+      const id = seqToId.get(l.seq);
+      if (!id) continue;
+      lineTranslations.push({
+        entity_type: "npc_dialogue_line",
+        entity_id: id,
+        locale: "es",
+        field: "text",
+        value: l.es,
+      });
+    }
+    if (lineTranslations.length > 0) {
+      const { error: ltErr } = await client
+        .from("translations")
+        .upsert(lineTranslations, { onConflict: "entity_type,entity_id,locale,field" });
+      if (ltErr) throw new Error(`upsert dialogue translations: ${ltErr.message}`);
+      lineTranslationsInserted += lineTranslations.length;
+    }
   }
-  if (lineTranslations.length > 0) {
-    const { error: ltErr } = await client
-      .from("translations")
-      .upsert(lineTranslations, { onConflict: "entity_type,entity_id,locale,field" });
-    if (ltErr) throw new Error(`upsert dialogue translations: ${ltErr.message}`);
-  }
+  reports.push({ table: "npc_dialogues", rows: dialoguesUpserted, translations: 0 });
   reports.push({
     table: "npc_dialogue_lines",
-    rows: lineRows.length,
-    translations: lineTranslations.length,
+    rows: linesInserted,
+    translations: lineTranslationsInserted,
   });
 
   return reports;

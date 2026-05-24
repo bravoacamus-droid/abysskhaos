@@ -230,6 +230,8 @@ export type RoomState = {
   connections: RoomConnectionRow[];
   npcs: RoomNpc[];
   props: RoomProp[];
+  /** Tileable PNG painted as the cave wall halo beyond the playable area. */
+  background_tile_url: string | null;
 };
 
 export type DialogueLine = {

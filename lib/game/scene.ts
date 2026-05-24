@@ -234,6 +234,12 @@ export class AbyssScene extends Phaser.Scene {
       queued.push(DOOR_TEXTURE_KEY);
     }
 
+    // Cave background tile (server tells us the URL from props table).
+    if (s.background_tile_url && !this.textures.exists("bg-tile")) {
+      this.load.image("bg-tile", s.background_tile_url);
+      queued.push("bg-tile");
+    }
+
     // Map props (dragon, portal, bridge, tree, etc.) — server hydrates
     // sprite_url for each, we load once per (kind) so revisiting a room
     // hits the texture cache. Props with metadata.animation_frames also
@@ -401,52 +407,27 @@ export class AbyssScene extends Phaser.Scene {
     // camera bounds are widened to include this halo so the bg can
     // actually be on-screen — collision still keeps the player inside
     // the original mapPxW × mapPxH.
-    // Extend the cave visually beyond the walkable map so portrait phones
-    // don't see a black void around small rooms. Try to extract the
-    // all-upper tile from the tileset PNG into its own texture and tile
-    // it; if any of the canvas plumbing fails (Phaser 4 API quirks,
-    // CORS on the source image), swallow it and fall back to plain
-    // bounds-locked camera.
+    // Cave halo: tile the bg sprite (PixelLab mineral wall) across a
+    // big area around the playable map so portrait viewports see cave
+    // continuing beyond the room edge instead of black void. The bg
+    // URL comes from the server (props table → role:background) so
+    // each biome can ship its own bg without code changes.
     const BG_HALO_PX = 1200;
-    const bgKey = `bg-${s.biome?.id ?? "wall"}`;
-    let bgReady = this.textures.exists(bgKey);
-    if (!bgReady) {
-      try {
-        const tilesArr = meta.tileset_data?.tiles ?? meta.tiles ?? [];
-        const upperTile = tilesArr.find(
-          (t) =>
-            t.corners.NW === "upper" &&
-            t.corners.NE === "upper" &&
-            t.corners.SW === "upper" &&
-            t.corners.SE === "upper",
-        );
-        if (upperTile) {
-          const bb = upperTile.bounding_box;
-          const sourceTexture = this.textures.get(tilesetKey);
-          const sourceImg = sourceTexture.getSourceImage() as CanvasImageSource | null;
-          const cnv = this.textures.createCanvas(bgKey, bb.width, bb.height);
-          if (cnv && sourceImg) {
-            cnv.context.drawImage(sourceImg, bb.x, bb.y, bb.width, bb.height, 0, 0, bb.width, bb.height);
-            cnv.refresh();
-            bgReady = true;
-          }
-        }
-      } catch (err) {
-        console.warn("[abyss/scene] cave halo extraction failed", err);
-      }
-    }
-    if (bgReady) {
+    if (this.textures.exists("bg-tile")) {
       const bgSprite = this.add
         .tileSprite(
           -BG_HALO_PX,
           -BG_HALO_PX,
           mapPxW + BG_HALO_PX * 2,
           mapPxH + BG_HALO_PX * 2,
-          bgKey,
+          "bg-tile",
         )
         .setOrigin(0, 0)
         .setDepth(-10)
-        .setTileScale(ZOOM, ZOOM);
+        // Source tile is 128 px; scale 0.5 makes each rendered tile
+        // 64 px = ~2 game tiles, dense enough that mineral detail
+        // reads without one giant texture dominating the view.
+        .setTileScale(0.5, 0.5);
       this.roomDecor.push(bgSprite);
       this.cameras.main.setBounds(
         -BG_HALO_PX,
@@ -455,7 +436,6 @@ export class AbyssScene extends Phaser.Scene {
         mapPxH + BG_HALO_PX * 2,
       );
     } else {
-      // No halo — restrict camera to map bounds so we don't expose the void.
       this.cameras.main.setBounds(0, 0, mapPxW, mapPxH);
     }
     this.cameras.main.centerOn(mapPxW / 2, mapPxH / 2);
@@ -484,6 +464,10 @@ export class AbyssScene extends Phaser.Scene {
 
     for (const npc of s.npcs) {
       if (npc.tile_x === null || npc.tile_y === null) continue;
+      // NPCs block the tile they stand on so the player can't walk
+      // through Cedric / Ozyel. Adjacency detection still picks them up
+      // from neighbour tiles, which is how the talk-prompt HUD triggers.
+      this.propBlockers.add(`${npc.tile_x},${npc.tile_y}`);
       const prefix = `npc-${npc.id}`;
       this.createAnimationsFor(prefix, npc.animation_atlas ?? null);
       const key = `${prefix}-south`;
