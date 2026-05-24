@@ -384,7 +384,14 @@ export class AbyssScene extends Phaser.Scene {
       return;
     }
 
-    const tileGrid = buildTileIndexGrid(map, meta);
+    // Pad the tilemap with extra wall cells outside the playable area so
+    // the cave wall texture continues seamlessly into the surrounding
+    // halo. The playable map renders at world (0,0) → the padded cells
+    // sit at negative world coords up to (-MAP_PAD_TILES * RENDERED_TILE).
+    // Collision is unaffected: isWallCell consults the ORIGINAL `map`
+    // (no padding), so the player still can't leave the playable area.
+    const MAP_PAD_TILES = 30;
+    const tileGrid = buildTileIndexGrid(map, meta, MAP_PAD_TILES);
     this.tilemap = this.make.tilemap({
       data: tileGrid,
       tileWidth: TILE_SIZE,
@@ -392,7 +399,8 @@ export class AbyssScene extends Phaser.Scene {
     });
     const ts = this.tilemap.addTilesetImage(tilesetKey, undefined, TILE_SIZE, TILE_SIZE, 0, 0);
     if (ts) {
-      const layer = this.tilemap.createLayer(0, ts, 0, 0);
+      const padPx = MAP_PAD_TILES * RENDERED_TILE;
+      const layer = this.tilemap.createLayer(0, ts, -padPx, -padPx);
       if (layer) layer.setScale(ZOOM);
     }
 

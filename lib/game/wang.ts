@@ -104,9 +104,10 @@ export function tileIndexFromBox(
 export function buildTileIndexGrid(
   map: TilemapData,
   meta: WangTilesetMeta,
+  paddingTiles = 0,
 ): number[][] {
-  const W = map.width;
-  const H = map.height;
+  const W = map.width + paddingTiles * 2;
+  const H = map.height + paddingTiles * 2;
   const imageWidthPx = meta.tileset_image.dimensions.width;
 
   const allTiles = tilesOf(meta);
@@ -120,11 +121,21 @@ export function buildTileIndexGrid(
   const lowerIdx = tileIndexFromBox(lowerTile.bounding_box, imageWidthPx);
   const upperIdx = tileIndexFromBox(upperTile.bounding_box, imageWidthPx);
 
+  // Padding cells (outside the playable map) always render as wall so the
+  // map's borders continue seamlessly into the surrounding void — no
+  // visible gap between the interior and the cave-wall background halo,
+  // because both use the SAME tileset texture.
   const out: number[][] = [];
   for (let y = 0; y < H; y++) {
     const row: number[] = [];
     for (let x = 0; x < W; x++) {
-      const ch = map.tiles[y]?.[x] ?? "#";
+      const realX = x - paddingTiles;
+      const realY = y - paddingTiles;
+      if (realX < 0 || realY < 0 || realX >= map.width || realY >= map.height) {
+        row.push(upperIdx);
+        continue;
+      }
+      const ch = map.tiles[realY]?.[realX] ?? "#";
       row.push(ch === "#" ? upperIdx : lowerIdx);
     }
     out.push(row);
