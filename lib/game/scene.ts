@@ -113,6 +113,18 @@ export class AbyssScene extends Phaser.Scene {
     this.npcSprites.clear();
   }
 
+  /**
+   * Pokemon-style room transition: React calls this the instant the
+   * player steps onto an exit tile, so the screen fades to black while
+   * the network call (and any loose tween) wraps up. The new room
+   * paints under the black overlay; buildRoomFromState then fades it
+   * back in. The player never sees themselves "stuck" on the door
+   * tile waiting for the next room.
+   */
+  startFadeOut(durationMs = 200): void {
+    this.cameras.main?.fadeOut(durationMs, 0, 0, 0);
+  }
+
   preload() {
     this.queueAssetsForCurrentState();
   }
@@ -612,6 +624,15 @@ export class AbyssScene extends Phaser.Scene {
 
     this.adjacentNpcId = null;
     this.checkNpcAdjacency();
+
+    // If the scene already booted, this is a room transition — fade
+    // the new room in from black. The matching fadeOut was kicked
+    // off by React's doMove() the moment the exit step committed,
+    // so the network round-trip was hidden under the black overlay.
+    // Cold spawn (booted=false) keeps the canvas immediately visible.
+    if (this.booted) {
+      this.cameras.main?.fadeIn(200, 0, 0, 0);
+    }
   }
 
   override update(_time: number, delta: number) {

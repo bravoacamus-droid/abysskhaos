@@ -156,24 +156,32 @@ export default function PhaserExploration({
     if (moving) return;
     setMoving(true);
     try {
-      // Run the network call and the move-tween "minimum visible time"
-      // in parallel. The tween starts the moment the user presses the
-      // direction; loadRoom should only fire after it finishes so the
-      // sprite is visibly on the door before the next room appears.
-      // - Network fast (cached props): wait for the tween to finish.
-      // - Network slow (cold room): tween long-done; render as soon as
-      //   data lands.
-      // Total feel: smooth slide → next room. No "half-step interrupt",
-      // no "snap teleport".
-      const TWEEN_HOLD_MS = 240;
+      // Pokemon-style cinematic transition. The instant the user
+      // commits to crossing a door:
+      //   1. Tell the scene to fade the camera to black (~200ms).
+      //   2. Fire the network request in parallel.
+      //   3. Wait for BOTH to finish — fade hides the network latency.
+      //   4. Call loadRoom while the screen is fully black, so the
+      //      tear-down + rebuild + sprite re-creation all happen out
+      //      of sight.
+      //   5. buildRoomFromState ends with cameras.fadeIn() so the new
+      //      room reveals smoothly.
+      // The player never sees themselves "waiting on the door tile"
+      // because the door tile is hidden under the fade by the time
+      // the tween reaches it.
+      const FADE_MS = 200;
+      const scene = sceneRef.current as {
+        loadRoom?: (s: RoomState) => void;
+        startFadeOut?: (ms?: number) => void;
+      } | null;
+      scene?.startFadeOut?.(FADE_MS);
       const [moveResp] = await Promise.all([
         moveCharacter({ initData, characterId, direction, locale }),
-        new Promise<void>((resolve) => window.setTimeout(resolve, TWEEN_HOLD_MS)),
+        new Promise<void>((resolve) => window.setTimeout(resolve, FADE_MS + 20)),
       ]);
       const next = moveResp.room_state;
       stateRef.current = next;
       setState(next);
-      const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
       scene?.loadRoom?.(next);
       flashBanner();
     } catch (err) {
