@@ -695,20 +695,28 @@ export class AbyssScene extends Phaser.Scene {
   private setPlayerFacing(dir: Direction) {
     if (this.playerDir === dir || !this.player) return;
     this.playerDir = dir;
-    // Only swap the static texture here; the caller will choose walk vs
-    // idle via setPlayerAnimState once it knows whether the step
-    // succeeded. Previously this method always replayed the current
-    // anim state in the new direction, which caused a brief walk-cycle
-    // flicker when the player turned into a wall (turn → walk-newdir →
-    // idle on hit-wall, all within ~10 frames).
     const key = this.spriteKeyForDir("player", dir);
     if (this.textures.exists(key)) this.player.setTexture(key);
+    // Re-evaluate the current anim state in the new direction so the
+    // sprite doesn't keep playing the OLD direction's frames. For
+    // lateral idle this snaps the sprite still (see setPlayerAnimState).
+    this.setPlayerAnimState(this.playerAnimState, true);
   }
 
   private setPlayerAnimState(state: AnimState, force = false) {
     if (!this.player) return;
     if (!force && this.playerAnimState === state) return;
     this.playerAnimState = state;
+    // Hold the static rotation texture when idle in profile (east/west)
+    // — the breathing motion in profile reads as the character dancing
+    // on the spot. Walk in profile still animates (legs moving sideways
+    // is correct).
+    if (state === "idle" && (this.playerDir === "east" || this.playerDir === "west")) {
+      this.player.anims.stop();
+      const key = this.spriteKeyForDir("player", this.playerDir);
+      if (this.textures.exists(key)) this.player.setTexture(key);
+      return;
+    }
     this.playSpriteAnim(this.player, "player", state, this.playerDir);
   }
 
