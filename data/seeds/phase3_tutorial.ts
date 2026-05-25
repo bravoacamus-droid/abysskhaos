@@ -118,12 +118,21 @@ const TILEMAPS: Record<string, TilemapData> = {
     spawn: { x: 6, y: 2 },
     exits: { south: { x: 6, y: 10 } },
     props: [
+      // Left tree stays cave_tree; right tree swapped to the simpler
+      // Pokemon-style cave_tree_simple.
       { kind: "cave_tree", x: 2, y: 8 },
-      { kind: "cave_tree", x: 10, y: 8 },
-      // Beast-hero statues of the Labyrinth flanking Cedric at (6, 5).
-      // 3x the size of Cedric, collidable, no animation.
-      { kind: "centaur_hero_statue", x: 3, y: 5 },
-      { kind: "lion_warrior_statue", x: 9, y: 5 },
+      { kind: "cave_tree_simple", x: 10, y: 8 },
+      // Beast-hero statues of the Labyrinth — moved one tile north
+      // (back) so a torch fits in front of each, facing Cedric.
+      { kind: "centaur_hero_statue", x: 3, y: 4 },
+      { kind: "lion_warrior_statue", x: 9, y: 4 },
+      // Animated torches in front of (south of) each statue.
+      { kind: "torch_animated", x: 3, y: 5 },
+      { kind: "torch_animated", x: 9, y: 5 },
+      // Rock just south of the north wall, behind Cedric (he's at 6,5).
+      { kind: "cave_rock", x: 6, y: 1 },
+      // Cedric's bedroll, centred south of him toward the exit.
+      { kind: "cave_bed", x: 6, y: 8 },
     ],
   },
   // The Underground River — horizontal river bisects the room. The
