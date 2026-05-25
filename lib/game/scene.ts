@@ -71,6 +71,18 @@ const DOOR_TEXTURE_KEY = "prop-door-threshold";
 /** Map prop kind → Phaser texture key. Stable so re-renders reuse cache. */
 const propTextureKey = (kind: string) => `prop-${kind}`;
 
+/** Derive a per-URL texture key for the cave background tile so
+ *  swapping the underlying asset in R2 invalidates Phaser's in-memory
+ *  texture cache automatically. Hard-coding "bg-tile" left the old
+ *  texture cached even after we replaced the prop's sprite_url. */
+const bgTextureKeyFor = (url: string) => {
+  // R2 assets are content-hashed; the final 12 hex chars of the
+  // filename are plenty to disambiguate.
+  const tail = url.split("/").pop() ?? url;
+  const hash = tail.replace(/\.[a-z]+$/i, "").slice(-12);
+  return `bg-tile-${hash}`;
+};
+
 export type SceneCallbacks = {
   onExitRequested?: (direction: Direction) => void;
   onNpcAdjacent?: (npcId: string | null) => void;
@@ -235,9 +247,16 @@ export class AbyssScene extends Phaser.Scene {
     }
 
     // Cave background tile (server tells us the URL from props table).
-    if (s.background_tile_url && !this.textures.exists("bg-tile")) {
-      this.load.image("bg-tile", s.background_tile_url);
-      queued.push("bg-tile");
+    // Derive the texture key from the URL itself so swapping the asset
+    // in R2 forces Phaser to load the new bytes — a hard-coded
+    // "bg-tile" key would keep returning the old cached texture even
+    // after we replaced the prop's sprite_url in the DB.
+    if (s.background_tile_url) {
+      const bgKey = bgTextureKeyFor(s.background_tile_url);
+      if (!this.textures.exists(bgKey)) {
+        this.load.image(bgKey, s.background_tile_url);
+        queued.push(bgKey);
+      }
     }
 
     // Map props (dragon, portal, bridge, tree, etc.) — server hydrates
@@ -419,9 +438,10 @@ export class AbyssScene extends Phaser.Scene {
     const haloY = -BG_HALO_PX;
     const haloW = mapPxW + BG_HALO_PX * 2;
     const haloH = mapPxH + BG_HALO_PX * 2;
-    if (this.textures.exists("bg-tile")) {
+    const bgKey = s.background_tile_url ? bgTextureKeyFor(s.background_tile_url) : null;
+    if (bgKey && this.textures.exists(bgKey)) {
       const bgSprite = this.add
-        .tileSprite(haloX, haloY, haloW, haloH, "bg-tile")
+        .tileSprite(haloX, haloY, haloW, haloH, bgKey)
         .setOrigin(0, 0)
         .setDepth(-10)
         // Source tile is 128 (v1) or 256 px (v2). 0.5 brings each
