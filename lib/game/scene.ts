@@ -82,6 +82,11 @@ const bgTextureKeyFor = (url: string) => {
   const hash = tail.replace(/\.[a-z]+$/i, "").slice(-12);
   return `bg-tile-${hash}`;
 };
+const tilesetKeyFor = (biomeId: string, url: string) => {
+  const tail = url.split("/").pop() ?? url;
+  const hash = tail.replace(/\.[a-z]+$/i, "").slice(-12);
+  return `tileset-${biomeId}-${hash}`;
+};
 
 export type SceneCallbacks = {
   onExitRequested?: (direction: Direction) => void;
@@ -217,7 +222,7 @@ export class AbyssScene extends Phaser.Scene {
     const queued: string[] = [];
 
     if (s.biome?.tileset_url && s.biome.tileset_metadata) {
-      const key = `tileset-${s.biome.id}`;
+      const key = tilesetKeyFor(s.biome.id, s.biome.tileset_url);
       if (!this.textures.exists(key)) {
         this.load.spritesheet(key, s.biome.tileset_url, {
           frameWidth: TILE_SIZE,
@@ -396,7 +401,9 @@ export class AbyssScene extends Phaser.Scene {
     const s = this.state;
     const map = s.room.tilemap_data;
     const meta = s.biome?.tileset_metadata;
-    const tilesetKey = s.biome ? `tileset-${s.biome.id}` : null;
+    const tilesetKey = s.biome?.tileset_url
+      ? tilesetKeyFor(s.biome.id, s.biome.tileset_url)
+      : null;
 
     if (!map || !meta || !tilesetKey) {
       this.add.text(8, 8, "Tilemap data missing", { color: "#ff5252", fontSize: "12px" });
