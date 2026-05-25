@@ -522,7 +522,8 @@ export class AbyssScene extends Phaser.Scene {
       sprite.setOrigin(0.5, CHARACTER_ORIGIN_Y);
       sprite.setDepth(5);
       this.npcSprites.set(npc.id, sprite);
-      this.playSpriteAnim(sprite, prefix, "idle", "south");
+      // NPCs are held on their static south-facing texture — no breathing.
+      // Matches the player's idle behaviour (fully static when not moving).
     }
 
     // Exit markers: real arch-doorway sprite at every connection tile so
@@ -707,11 +708,10 @@ export class AbyssScene extends Phaser.Scene {
     if (!this.player) return;
     if (!force && this.playerAnimState === state) return;
     this.playerAnimState = state;
-    // Hold the static rotation texture when idle in profile (east/west)
-    // — the breathing motion in profile reads as the character dancing
-    // on the spot. Walk in profile still animates (legs moving sideways
-    // is correct).
-    if (state === "idle" && (this.playerDir === "east" || this.playerDir === "west")) {
+    // Idle is fully static — the breathing motion reads as the
+    // character "shivering" / "dancing" in every direction. Player
+    // only animates while actually moving.
+    if (state === "idle") {
       this.player.anims.stop();
       const key = this.spriteKeyForDir("player", this.playerDir);
       if (this.textures.exists(key)) this.player.setTexture(key);
