@@ -50,12 +50,14 @@ const CHARACTER_SCALE = 0.7;
  */
 const CHARACTER_ORIGIN_Y = 1.0;
 /**
- * Frames-per-second for walk + idle. PixelLab walk-4-frames animations
- * read naturally around 8fps (matches the 4-frame leg cycle felt in
- * Pokemon / Chrono Trigger overworld). Idle breathing is slower visually
- * but using the same FPS keeps the loop tight against the grid step.
+ * Frames-per-second for walk + idle. Pokemon-style tile-based movement
+ * works best when ONE walk cycle = ONE step. Our step is ~260 ms
+ * (220 ms tween + 40 ms cooldown), so 4 frames need to play in ~260 ms
+ * → 4 / 0.260 ≈ 15 fps. At 8 fps the cycle was 500 ms — twice the step
+ * — and the legs kept shuffling across steps instead of completing
+ * one cycle per step, which the user felt as "muchos pasos a la vez".
  */
-const ANIM_FRAMERATE = 8;
+const ANIM_FRAMERATE = 15;
 const ALL_DIRECTIONS: Direction[] = ["south", "north", "east", "west"];
 type AnimState = "walk" | "idle";
 
@@ -693,17 +695,19 @@ export class AbyssScene extends Phaser.Scene {
   private setPlayerFacing(dir: Direction) {
     if (this.playerDir === dir || !this.player) return;
     this.playerDir = dir;
-    const animPlayed = this.playSpriteAnim(this.player, "player", this.playerAnimState, dir);
-    if (!animPlayed) {
-      // Fallback: no animation registered for this direction → swap the
-      // static rotation texture so the player at least faces the new way.
-      const key = this.spriteKeyForDir("player", dir);
-      if (this.textures.exists(key)) this.player.setTexture(key);
-    }
+    // Only swap the static texture here; the caller will choose walk vs
+    // idle via setPlayerAnimState once it knows whether the step
+    // succeeded. Previously this method always replayed the current
+    // anim state in the new direction, which caused a brief walk-cycle
+    // flicker when the player turned into a wall (turn → walk-newdir →
+    // idle on hit-wall, all within ~10 frames).
+    const key = this.spriteKeyForDir("player", dir);
+    if (this.textures.exists(key)) this.player.setTexture(key);
   }
 
-  private setPlayerAnimState(state: AnimState) {
-    if (this.playerAnimState === state || !this.player) return;
+  private setPlayerAnimState(state: AnimState, force = false) {
+    if (!this.player) return;
+    if (!force && this.playerAnimState === state) return;
     this.playerAnimState = state;
     this.playSpriteAnim(this.player, "player", state, this.playerDir);
   }
