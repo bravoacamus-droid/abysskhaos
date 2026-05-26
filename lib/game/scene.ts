@@ -62,14 +62,15 @@ const ALL_DIRECTIONS: Direction[] = ["south", "north", "east", "west"];
 type AnimState = "walk" | "idle";
 
 /**
- * The original door arch is still used to mark every room exit. It's
- * generated once per session and looked up by hardcoded URL; the rest
- * of the prop catalogue (dragon, bridge, tree, portal) now travels in
- * state.props with its own sprite URL.
+ * Every room exit is marked by a stone cave arch — the Pokemon Emerald
+ * convention: a doorway carved INTO the wall, not a magical portal
+ * floating in front of it. Hardcoded URL because every cave room reuses
+ * the same arch; biome-specific arches can be wired later via the props
+ * table the same way trees / dragons / bridges already are.
  */
 const DOOR_SPRITE_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/a83a12cc6eabab1d40ff3403ce9515cbcb2d39aee30eeddc61134923fcf8cf31.png";
-const DOOR_TEXTURE_KEY = "prop-door-threshold";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/74f4a2b680b7e9975a162a4e58edfbd8cd154fe7c5852a3d04bcdbf87dde6ac1.png";
+const DOOR_TEXTURE_KEY = "prop-door-cave-arch";
 /** Map prop kind → Phaser texture key. Stable so re-renders reuse cache. */
 const propTextureKey = (kind: string) => `prop-${kind}`;
 
@@ -612,31 +613,18 @@ export class AbyssScene extends Phaser.Scene {
         if (!validExitDirs.has(dirRaw as Direction)) continue;
         const cx = exit.x * RENDERED_TILE + RENDERED_TILE / 2;
         const cy = exit.y * RENDERED_TILE + RENDERED_TILE / 2;
-        const halo = this.add
-          .circle(cx, cy, RENDERED_TILE * 0.7, 0xb88cff, 0.22)
-          .setDepth(6);
+        // Stone arch: scale 1.0 so the 64px source displays at ~64px,
+        // slightly bigger than the 48px tile so the arch base overlaps
+        // the adjacent wall tiles — reads as "carved INTO the rock",
+        // not "object floating in front of it". No halo, no bobbing —
+        // Pokemon cave entrances are silent stone, the visual contrast
+        // (dark opening in lighter stone) is what marks it as an exit.
         const door = this.add
           .image(cx, cy, DOOR_TEXTURE_KEY)
           .setOrigin(0.5, 0.5)
-          .setScale(0.7)
+          .setScale(1.0)
           .setDepth(7);
-        this.roomDecor.push(halo, door);
-        this.tweens.add({
-          targets: halo,
-          alpha: { from: 0.28, to: 0.12 },
-          duration: 1100,
-          yoyo: true,
-          repeat: -1,
-          ease: "Sine.easeInOut",
-        });
-        this.tweens.add({
-          targets: door,
-          y: { from: cy - 1, to: cy + 1 },
-          duration: 1400,
-          yoyo: true,
-          repeat: -1,
-          ease: "Sine.easeInOut",
-        });
+        this.roomDecor.push(door);
       }
     }
 

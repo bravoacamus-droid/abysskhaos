@@ -113,7 +113,9 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "#...........#",
       "#...........#",
-      "#####...#####", // exit south at (6, 10)
+      "######.######", // exit south at (6, 10) — narrow 1-tile gap so the
+      // stone arch sprite reads as "carved INTO the wall" rather than
+      // hovering in a 3-tile-wide opening with grass visible around it.
     ],
     spawn: { x: 6, y: 2 },
     exits: { south: { x: 6, y: 10 } },
@@ -144,7 +146,7 @@ const TILEMAPS: Record<string, TilemapData> = {
     width: 13,
     height: 11,
     tiles: [
-      "#####...#####", // exit north
+      "######.######", // exit north (1-tile gap for stone arch)
       "#...........#",
       "#...........#",
       "#...........#",
@@ -154,7 +156,7 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "#...........#",
       "#...........#",
-      "#####...#####", // exit south
+      "######.######", // exit south (1-tile gap for stone arch)
     ],
     spawn: { x: 6, y: 9 },
     exits: { north: { x: 6, y: 0 }, south: { x: 6, y: 10 } },
@@ -183,7 +185,7 @@ const TILEMAPS: Record<string, TilemapData> = {
     width: 13,
     height: 11,
     tiles: [
-      "#####...#####", // exit north
+      "######.######", // exit north (1-tile gap for stone arch)
       "#...........#",
       "#...........#",
       "#...........#", // dragon visually anchors around (6, 4)
