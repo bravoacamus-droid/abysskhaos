@@ -129,11 +129,10 @@ const TILEMAPS: Record<string, TilemapData> = {
       // Animated torches in front of (south of) each statue.
       { kind: "torch_animated", x: 3, y: 5 },
       { kind: "torch_animated", x: 9, y: 5 },
-      // Cedric's sleeping rock — large boulder against the north wall.
-      // The pillow rests beside it, suggesting he sleeps curled on the
-      // stone like a lion.
-      { kind: "cave_rock", x: 6, y: 1 },
-      { kind: "cave_pillow", x: 7, y: 1 },
+      // Cedric's sleeping rock — boulder a tile south of the north
+      // wall so it sits a bit forward in the room. He curls on it like
+      // a lion (no pillow).
+      { kind: "cave_rock", x: 6, y: 2 },
     ],
   },
   // The Underground River — horizontal river bisects the room. The
