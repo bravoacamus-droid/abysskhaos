@@ -131,11 +131,11 @@ const TILEMAPS: Record<string, TilemapData> = {
       // Animated torches in front of (south of) each statue.
       { kind: "torch_animated", x: 3, y: 5 },
       { kind: "torch_animated", x: 9, y: 5 },
-      // Cedric's warrior's last camp — bedroll, broken sword stuck in
-      // the ground, dented helmet. This is where he died and his gear
-      // remained; reinforces his line "me llamaron Cedric cuando tuve
-      // cuerpo digno de un nombre". Replaced the prior cave_rock.
-      { kind: "cave_war_camp", x: 6, y: 2 },
+      // Natural cave spring — Cedric's water source at his post. Sits
+      // where the earlier cave_rock / cave_war_camp lived, behind him.
+      // (The war_camp + cottage_veteran + cave_farm props are kept in
+      // the catalog for use in later rooms / floors.)
+      { kind: "cave_spring", x: 6, y: 2 },
     ],
   },
   // The Underground River — horizontal river bisects the room. The
