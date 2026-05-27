@@ -95,12 +95,30 @@ export function tileIndexFromBox(
  * walls, even though the cell is walkable. That's how exits ended up
  * looking like solid stone.
  *
- * Cell-based: every `.` paints the all-lower tile, every `#` paints the
- * all-upper tile. The visual is now 1:1 with `isWallCell`, so the player
- * never sees passable floor that looks like wall (or walkable wall).
- * Trade-off: transitions are blocky instead of soft, but PixelLab's
- * tileset's all-lower tile already includes its own subtle bevel.
+ * Cell-based: every `.` paints a floor tile, every `#` paints the
+ * all-upper (wall) tile. The visual is now 1:1 with `isWallCell`.
+ *
+ * Multi-variant floor (Option B): if the tileset PNG extends below the
+ * 4×4 Wang grid, the extra rows are treated as extra floor variants. A
+ * deterministic per-cell hash picks one variant for each `.` cell so the
+ * map reads as a varied natural surface instead of a single repeating
+ * tile. The biome's wang tileset stays unchanged (16 wang tiles); we
+ * just look at how many extra rows the PNG has and use those tile
+ * indices as the variant pool. No tileset = behavior identical to
+ * pre-variant rendering.
  */
+const WANG_GRID_ROWS = 4; // PixelLab wang tilesets are always 4×4 = 16 tiles
+/** Mixed Bezeier-style integer hash, well distributed for small grids. */
+function pickFloorVariantIndex(
+  x: number,
+  y: number,
+  variants: readonly number[],
+): number {
+  if (variants.length <= 1) return variants[0]!;
+  const h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+  return variants[h % variants.length]!;
+}
+
 export function buildTileIndexGrid(
   map: TilemapData,
   meta: WangTilesetMeta,
@@ -109,6 +127,7 @@ export function buildTileIndexGrid(
   const W = map.width + paddingTiles * 2;
   const H = map.height + paddingTiles * 2;
   const imageWidthPx = meta.tileset_image.dimensions.width;
+  const imageHeightPx = meta.tileset_image.dimensions.height;
 
   const allTiles = tilesOf(meta);
   if (allTiles.length === 0) {
@@ -120,6 +139,21 @@ export function buildTileIndexGrid(
     findTileByCorners(meta, "upper", "upper", "upper", "upper") ?? lowerTile;
   const lowerIdx = tileIndexFromBox(lowerTile.bounding_box, imageWidthPx);
   const upperIdx = tileIndexFromBox(upperTile.bounding_box, imageWidthPx);
+
+  // Floor variants live in tile rows BEYOND the 4×4 wang grid. If the
+  // PNG was extended (e.g. 64×80 → row 4 added), tiles 16..19 are extra
+  // grass variants and we randomize per cell. If the PNG is still the
+  // original 64×64 (no extra rows), the variant pool is just the wang
+  // lower tile and behavior is unchanged.
+  const tileSize = lowerTile.bounding_box.width;
+  const colsPerRow = Math.max(1, Math.floor(imageWidthPx / tileSize));
+  const totalRows = Math.max(WANG_GRID_ROWS, Math.floor(imageHeightPx / tileSize));
+  const floorVariants: number[] = [lowerIdx];
+  for (let row = WANG_GRID_ROWS; row < totalRows; row++) {
+    for (let col = 0; col < colsPerRow; col++) {
+      floorVariants.push(row * colsPerRow + col);
+    }
+  }
 
   // Padding cells (outside the playable map) always render as wall so the
   // map's borders continue seamlessly into the surrounding void — no
@@ -136,7 +170,9 @@ export function buildTileIndexGrid(
         continue;
       }
       const ch = map.tiles[realY]?.[realX] ?? "#";
-      row.push(ch === "#" ? upperIdx : lowerIdx);
+      row.push(
+        ch === "#" ? upperIdx : pickFloorVariantIndex(realX, realY, floorVariants),
+      );
     }
     out.push(row);
   }
