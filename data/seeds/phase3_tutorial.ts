@@ -136,12 +136,14 @@ const TILEMAPS: Record<string, TilemapData> = {
       // (The war_camp + cottage_veteran + cave_farm props are kept in
       // the catalog for use in later rooms / floors.)
       { kind: "cave_spring", x: 6, y: 2 },
-      // Two new tree variants flank the spring: pine on the left
-      // (mirrors centaur statue's col 3), oak on the right (mirrors
-      // lion statue's col 9). Different silhouettes for visual variety
-      // while matching the existing cave_tree palette.
+      // Tree cluster around the spring:
+      //   Two adjacent pines on the left form a small grove (the
+      //   doubled silhouette reads as a thicker stand than a single
+      //   tree). The oak sits one row higher (y=1) so its canopy
+      //   doesn't drape over the lion statue at (9, 4).
+      { kind: "cave_pine", x: 2, y: 2 },
       { kind: "cave_pine", x: 3, y: 2 },
-      { kind: "cave_oak", x: 9, y: 2 },
+      { kind: "cave_oak", x: 9, y: 1 },
     ],
   },
   // The Underground River — horizontal river bisects the room. The
