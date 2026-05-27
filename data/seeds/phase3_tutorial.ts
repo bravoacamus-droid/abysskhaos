@@ -144,6 +144,30 @@ const TILEMAPS: Record<string, TilemapData> = {
       { kind: "cave_pine", x: 2, y: 2 },
       { kind: "cave_pine", x: 3, y: 2 },
       { kind: "cave_oak", x: 9, y: 1 },
+      // r01 polish pass — worn footpath + altar + ambient mushrooms
+      // + Cedric's seat. All non-collidable (visual storytelling only,
+      // not navigation puzzles). Only Cedric NPC gates the center.
+      // Stepping stones trace Cedric's daily route from his post to
+      // the exit arch — gaps left at rows 4 (altar) and 5 (Cedric).
+      { kind: "stepping_stone", x: 6, y: 3 },
+      { kind: "stepping_stone", x: 6, y: 6 },
+      { kind: "stepping_stone", x: 6, y: 7 },
+      { kind: "stepping_stone", x: 6, y: 8 },
+      { kind: "stepping_stone", x: 6, y: 9 },
+      // Memorial altar centered between centaur (3,4) and lion (9,4)
+      // statues — gives Cedric a sacred caretaker role tending the
+      // fallen heroes' offering.
+      { kind: "memorial_altar", x: 6, y: 4 },
+      // Bioluminescent mushroom clusters scattered in the empty
+      // corners — justify the cyan glow already in the tree palette
+      // and give the cave its own quiet life.
+      { kind: "cave_mushroom_cluster", x: 1, y: 3 },
+      { kind: "cave_mushroom_cluster", x: 11, y: 3 },
+      { kind: "cave_mushroom_cluster", x: 1, y: 7 },
+      // Cedric's bench beside his NPC tile — a place to rest between
+      // duties. Makes him feel like a real inhabitant, not just an
+      // NPC marker.
+      { kind: "cedric_bench", x: 5, y: 5 },
     ],
   },
   // The Underground River — horizontal river bisects the room. The
