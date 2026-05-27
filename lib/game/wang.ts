@@ -141,19 +141,24 @@ export function buildTileIndexGrid(
   const upperIdx = tileIndexFromBox(upperTile.bounding_box, imageWidthPx);
 
   // Floor variants live in tile rows BEYOND the 4×4 wang grid. If the
-  // PNG was extended (e.g. 64×80 → row 4 added), tiles 16..19 are extra
-  // grass variants and we randomize per cell. If the PNG is still the
-  // original 64×64 (no extra rows), the variant pool is just the wang
-  // lower tile and behavior is unchanged.
+  // PNG was extended (e.g. 64×128 → rows 4-7 added with a coherent
+  // grass tileset), those tile indices are the variant pool. When the
+  // PNG has extras, they REPLACE the wang lower tile entirely so the
+  // pool stays palette-coherent (mixing a dark wang lower with a
+  // brighter variant set would show the old tile as random dark spots
+  // — exactly the "chanfaina" we want to avoid). When the PNG is still
+  // the original 64×64 (no extras), the pool falls back to just the
+  // wang lower tile and behavior is unchanged.
   const tileSize = lowerTile.bounding_box.width;
   const colsPerRow = Math.max(1, Math.floor(imageWidthPx / tileSize));
   const totalRows = Math.max(WANG_GRID_ROWS, Math.floor(imageHeightPx / tileSize));
-  const floorVariants: number[] = [lowerIdx];
+  const floorVariants: number[] = [];
   for (let row = WANG_GRID_ROWS; row < totalRows; row++) {
     for (let col = 0; col < colsPerRow; col++) {
       floorVariants.push(row * colsPerRow + col);
     }
   }
+  if (floorVariants.length === 0) floorVariants.push(lowerIdx);
 
   // Padding cells (outside the playable map) always render as wall so the
   // map's borders continue seamlessly into the surrounding void — no
