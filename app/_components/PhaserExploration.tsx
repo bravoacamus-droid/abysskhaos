@@ -91,7 +91,21 @@ export default function PhaserExploration({
           backgroundColor: "#06070C",
           pixelArt: true,
           antialias: false,
-          fps: { target: 30, forceSetTimeOut: true },
+          // Use Phaser defaults: requestAnimationFrame at 60fps. The
+          // previous `{ target: 30, forceSetTimeOut: true }` config was
+          // a copy-paste from a legacy Phaser tutorial and caused two
+          // mobile-only regressions:
+          //   1. Hard cap at 30fps made everything feel chunky.
+          //   2. forceSetTimeOut: true forces setTimeout instead of
+          //      requestAnimationFrame for the game loop. Modern mobile
+          //      browsers aggressively throttle setTimeout when the
+          //      WebView loses focus or after the tab has been idle —
+          //      this is exactly the "se cuelga con tiempo" symptom the
+          //      user reported. setTimeout also has worse latency for
+          //      input handling, which compounded into rapid-tap lag.
+          // requestAnimationFrame syncs with display vblank, isn't
+          // throttled when in focus, and gives Phaser proper delta
+          // values for smooth animation timing.
           scale: {
             // RESIZE keeps the canvas filling the wrapper div on every
             // viewport change. The camera follows the player so even
