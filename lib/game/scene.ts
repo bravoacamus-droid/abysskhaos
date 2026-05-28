@@ -670,9 +670,17 @@ export class AbyssScene extends Phaser.Scene {
     this.virtualDir = dir;
   }
 
-  /** Same as a virtual press but a one-shot — call once per tap. */
+  /** Same as a virtual press but a one-shot — call once per tap.
+   *
+   *  Must respect `moveCooldownMs` the same way `update()` does. Without
+   *  the check, rapid mobile D-pad taps spam `attemptMove`, which kills
+   *  + restarts the player tween on every call. On mobile WebView the
+   *  tween thrashing + state updates cascade visibly as walking lag;
+   *  on PC the CPU just eats it. Throttling matches hold-to-walk
+   *  behaviour, which is what rapid taps imply anyway. */
   pressDirectionOnce(dir: Direction) {
     if (!this.player || !this.state.room.tilemap_data) return;
+    if (this.moveCooldownMs > 0) return;
     this.attemptMove(dir);
   }
 
