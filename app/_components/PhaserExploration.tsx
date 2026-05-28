@@ -356,13 +356,20 @@ function DPad({
    * count as two presses (which was producing the double-step regression).
    */
   const lastPressAt = useRef<Map<Direction, number>>(new Map());
-  const DEDUP_MS = 120;
+  // 260ms matches MOVE_COOLDOWN_MS in scene.ts. Rapid-fire taps faster
+  // than that are guaranteed to be no-ops on the Phaser side anyway
+  // (the in-progress walk tween still owns the cooldown), so we may as
+  // well drop them at the event boundary instead of paying the cost of
+  // React/Phaser handler invocation for each ghost tap. On mobile
+  // WebView the touch-event pipeline itself is expensive — fewer events
+  // = less per-frame jank during rapid tapping.
+  const DEDUP_MS = 260;
 
   function startPress(direction: Direction) {
     if (disabled) return;
     const now = performance.now();
     const last = lastPressAt.current.get(direction) ?? 0;
-    if (now - last < DEDUP_MS) return; // ghost event from sibling pointer/touch handler
+    if (now - last < DEDUP_MS) return; // dedup (both pointer/touch ghost AND user rapid-tap)
     lastPressAt.current.set(direction, now);
     onPress(direction);
     const existing = holdTimeouts.current.get(direction);
@@ -390,7 +397,10 @@ function DPad({
           type="button"
           disabled={disabled}
           onPointerDown={(e) => {
-            e.preventDefault();
+            // No preventDefault: the button has `touch-action: none`
+            // already, which handles double-tap zoom / text selection
+            // at the CSS layer without paying preventDefault's per-event
+            // compositor flush cost on mobile WebView.
             e.stopPropagation();
             startPress(d.id);
           }}
