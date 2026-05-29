@@ -9,6 +9,22 @@ import type {
   ItemCatalogEntry,
   RoomState,
 } from "@/lib/client/api";
+import {
+  AGI_ICON_URL,
+  ATK_ICON_URL,
+  CAT_ACCESSORY_ICON_URL,
+  CAT_ARMOR_ICON_URL,
+  CAT_CONSUMABLE_ICON_URL,
+  CAT_WEAPON_ICON_URL,
+  DEF_ICON_URL,
+  HP_ICON_URL,
+  INT_ICON_URL,
+  KHRYN_ICON_URL,
+  MP_ICON_URL,
+  SPR_ICON_URL,
+  STR_ICON_URL,
+  categoryIconUrl,
+} from "@/lib/client/icons";
 
 const SLOT_FRAME_URL =
   "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/5dc89ad9a52d6e028e75b88b091981d622722265f4d8b0001b8c4a49dfc388ba.png";
@@ -157,8 +173,16 @@ export function InventoryPanel({
         <h1 className="bg-gradient-to-b from-abyss-soul via-abyss-khaos to-abyss-ember bg-clip-text text-base font-bold uppercase tracking-[0.4em] text-transparent">
           {t(locale, "inventory.title")}
         </h1>
-        <div className="flex items-center gap-1 text-xs text-amber-300">
-          <span>◈</span>
+        <div className="flex items-center gap-1.5 text-xs text-amber-300">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={KHRYN_ICON_URL}
+            alt=""
+            width={20}
+            height={20}
+            className="h-5 w-5"
+            style={{ imageRendering: "pixelated" }}
+          />
           <span className="font-semibold tabular-nums">{state.player.khryn}</span>
         </div>
       </header>
@@ -280,6 +304,7 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
       {/* HP / MP bars */}
       <div className="space-y-1">
         <BarLine
+          icon={HP_ICON_URL}
           label="HP"
           color="bg-rose-500"
           value={p.hp_current}
@@ -287,6 +312,7 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
           pct={hpPct}
         />
         <BarLine
+          icon={MP_ICON_URL}
           label="MP"
           color="bg-sky-400"
           value={p.mp_current}
@@ -296,24 +322,26 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
       </div>
       {/* Primary attrs summary */}
       <div className="grid grid-cols-2 gap-x-2 gap-y-1 rounded border border-abyss-coal/60 bg-abyss-void/50 px-2 py-1.5 text-[10px]">
-        <StatLine label={t(locale, "stats.atk")} value={p.atk} />
-        <StatLine label={t(locale, "stats.def")} value={p.def} />
-        <StatLine label="STR" value={p.attr_strength} />
-        <StatLine label="AGI" value={p.attr_agility} />
-        <StatLine label="INT" value={p.attr_intelligence} />
-        <StatLine label="SPR" value={p.attr_spirit} />
+        <StatLine icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={p.atk} />
+        <StatLine icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={p.def} />
+        <StatLine icon={STR_ICON_URL} label="STR" value={p.attr_strength} />
+        <StatLine icon={AGI_ICON_URL} label="AGI" value={p.attr_agility} />
+        <StatLine icon={INT_ICON_URL} label="INT" value={p.attr_intelligence} />
+        <StatLine icon={SPR_ICON_URL} label="SPR" value={p.attr_spirit} />
       </div>
     </div>
   );
 }
 
 function BarLine({
+  icon,
   label,
   color,
   value,
   max,
   pct,
 }: {
+  icon?: string;
   label: string;
   color: string;
   value: number;
@@ -322,8 +350,14 @@ function BarLine({
 }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between text-[9px] uppercase tracking-widest text-abyss-fog">
-        <span>{label}</span>
+      <div className="flex items-center justify-between gap-1 text-[9px] uppercase tracking-widest text-abyss-fog">
+        <div className="flex items-center gap-1">
+          {icon ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={icon} alt="" width={14} height={14} className="h-3.5 w-3.5" style={{ imageRendering: "pixelated" }} />
+          ) : null}
+          <span>{label}</span>
+        </div>
         <span className="tabular-nums text-white">
           {value}/{max}
         </span>
@@ -335,10 +369,31 @@ function BarLine({
   );
 }
 
-function StatLine({ label, value }: { label: string; value: number }) {
+function StatLine({
+  icon,
+  label,
+  value,
+}: {
+  icon?: string;
+  label: string;
+  value: number;
+}) {
   return (
-    <div className="flex items-baseline justify-between text-abyss-mist">
-      <span className="uppercase tracking-widest text-abyss-fog">{label}</span>
+    <div className="flex items-center justify-between gap-1 text-abyss-mist">
+      <div className="flex items-center gap-1">
+        {icon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={icon}
+            alt=""
+            width={12}
+            height={12}
+            className="h-3 w-3"
+            style={{ imageRendering: "pixelated" }}
+          />
+        ) : null}
+        <span className="uppercase tracking-widest text-abyss-fog">{label}</span>
+      </div>
       <span className="tabular-nums text-white">{value}</span>
     </div>
   );
@@ -414,10 +469,18 @@ function EquipoTab({
                 {cat?.name_localized ?? <span className="italic text-abyss-mist">{t(locale, "inventory.empty_slot")}</span>}
               </p>
               {cat?.weapon ? (
-                <p className="text-[9px] text-abyss-soul">ATK +{cat.weapon.base_atk}</p>
+                <p className="flex items-center gap-1 text-[9px] text-abyss-soul">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={ATK_ICON_URL} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                  +{cat.weapon.base_atk}
+                </p>
               ) : null}
               {cat?.armor ? (
-                <p className="text-[9px] text-abyss-soul">DEF +{cat.armor.base_def}</p>
+                <p className="flex items-center gap-1 text-[9px] text-abyss-soul">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={DEF_ICON_URL} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                  +{cat.armor.base_def}
+                </p>
               ) : null}
             </div>
             <span className="text-abyss-soul">{item ? "✕" : "›"}</span>
@@ -463,21 +526,37 @@ function InventarioTab({
     <div className="flex h-full flex-col">
       {/* Category filter chips */}
       <div className="mb-2 flex flex-wrap gap-1">
-        {CATEGORY_KEYS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => setCategory(c)}
-            className={
-              "rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest " +
-              (category === c
-                ? "border-abyss-soul/80 bg-abyss-soul/20 text-white"
-                : "border-abyss-coal/70 bg-abyss-void/60 text-abyss-fog hover:bg-abyss-coal/30")
-            }
-          >
-            {t(locale, `inventory.category.${c}`)}
-          </button>
-        ))}
+        {CATEGORY_KEYS.map((c) => {
+          const icon =
+            c === "weapon"
+              ? CAT_WEAPON_ICON_URL
+              : c === "armor"
+                ? CAT_ARMOR_ICON_URL
+                : c === "accessory"
+                  ? CAT_ACCESSORY_ICON_URL
+                  : c === "consumable"
+                    ? CAT_CONSUMABLE_ICON_URL
+                    : null;
+          return (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={
+                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest " +
+                (category === c
+                  ? "border-abyss-soul/80 bg-abyss-soul/20 text-white"
+                  : "border-abyss-coal/70 bg-abyss-void/60 text-abyss-fog hover:bg-abyss-coal/30")
+              }
+            >
+              {icon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={icon} alt="" width={14} height={14} className="h-3.5 w-3.5" style={{ imageRendering: "pixelated" }} />
+              ) : null}
+              {t(locale, `inventory.category.${c}`)}
+            </button>
+          );
+        })}
       </div>
 
       {/* Scrollable item list. Single column with item rows so the
@@ -529,7 +608,14 @@ function InventarioTab({
                   <p className="truncate text-xs font-semibold text-white">
                     {cat?.name_localized ?? item.item_id}
                   </p>
-                  <p className="text-[9px] uppercase tracking-widest text-abyss-fog">
+                  <p className="flex items-center gap-1 text-[9px] uppercase tracking-widest text-abyss-fog">
+                    {cat ? (() => {
+                      const ico = categoryIconUrl(cat.item_type);
+                      return ico ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={ico} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                      ) : null;
+                    })() : null}
                     {t(locale, `inventory.category.${cat?.item_type ?? "misc"}`)}
                   </p>
                 </div>
@@ -547,8 +633,10 @@ function InventarioTab({
         <div className="mt-2 rounded border border-abyss-soul/70 bg-abyss-deep p-2 shadow-lg">
           <p className="text-xs font-bold text-white">{selectedCat.name_localized}</p>
           {selectedCat.weapon ? (
-            <p className="text-[10px] text-abyss-soul">
-              {t(locale, "stats.atk")} +{selectedCat.weapon.base_atk} ·{" "}
+            <p className="flex items-center gap-1.5 text-[10px] text-abyss-soul">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={ATK_ICON_URL} alt="" width={12} height={12} className="h-3 w-3" style={{ imageRendering: "pixelated" }} />
+              +{selectedCat.weapon.base_atk} ·{" "}
               {selectedCat.weapon.handedness === "two_handed"
                 ? t(locale, "inventory.handedness.two_handed")
                 : selectedCat.weapon.handedness === "off_hand"
@@ -557,8 +645,10 @@ function InventarioTab({
             </p>
           ) : null}
           {selectedCat.armor ? (
-            <p className="text-[10px] text-abyss-soul">
-              {t(locale, "stats.def")} +{selectedCat.armor.base_def}
+            <p className="flex items-center gap-1.5 text-[10px] text-abyss-soul">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={DEF_ICON_URL} alt="" width={12} height={12} className="h-3 w-3" style={{ imageRendering: "pixelated" }} />
+              +{selectedCat.armor.base_def}
             </p>
           ) : null}
           {(selectedCat.item_type === "weapon" ||
@@ -593,16 +683,16 @@ function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
   return (
     <div className="space-y-3">
       <Section title={t(locale, "stats.section_combat")}>
-        <KV label={t(locale, "stats.hp")} value={`${p.hp_current} / ${p.hp_max}`} />
-        <KV label={t(locale, "stats.mp")} value={`${p.mp_current} / ${p.mp_max}`} />
-        <KV label={t(locale, "stats.atk")} value={p.atk} />
-        <KV label={t(locale, "stats.def")} value={p.def} />
+        <KV icon={HP_ICON_URL} label={t(locale, "stats.hp")} value={`${p.hp_current} / ${p.hp_max}`} />
+        <KV icon={MP_ICON_URL} label={t(locale, "stats.mp")} value={`${p.mp_current} / ${p.mp_max}`} />
+        <KV icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={p.atk} />
+        <KV icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={p.def} />
       </Section>
       <Section title={t(locale, "stats.section_attrs")}>
-        <KV label="STR" value={p.attr_strength} />
-        <KV label="AGI" value={p.attr_agility} />
-        <KV label="INT" value={p.attr_intelligence} />
-        <KV label="SPR" value={p.attr_spirit} />
+        <KV icon={STR_ICON_URL} label="STR" value={p.attr_strength} />
+        <KV icon={AGI_ICON_URL} label="AGI" value={p.attr_agility} />
+        <KV icon={INT_ICON_URL} label="INT" value={p.attr_intelligence} />
+        <KV icon={SPR_ICON_URL} label="SPR" value={p.attr_spirit} />
       </Section>
       <Section title={t(locale, "stats.section_progress")}>
         <KV label={t(locale, "stats.level")} value={p.level} />
@@ -626,10 +716,31 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function KV({ label, value }: { label: string; value: number | string }) {
+function KV({
+  icon,
+  label,
+  value,
+}: {
+  icon?: string;
+  label: string;
+  value: number | string;
+}) {
   return (
-    <div className="flex items-baseline justify-between text-xs">
-      <span className="uppercase tracking-widest text-abyss-fog">{label}</span>
+    <div className="flex items-center justify-between gap-2 text-xs">
+      <div className="flex items-center gap-1.5">
+        {icon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={icon}
+            alt=""
+            width={16}
+            height={16}
+            className="h-4 w-4"
+            style={{ imageRendering: "pixelated" }}
+          />
+        ) : null}
+        <span className="uppercase tracking-widest text-abyss-fog">{label}</span>
+      </div>
       <span className="tabular-nums font-semibold text-white">{value}</span>
     </div>
   );
@@ -708,10 +819,18 @@ function SlotPickerModal({
                       {cat?.name_localized ?? item.item_id}
                     </p>
                     {cat?.weapon ? (
-                      <p className="text-[9px] text-abyss-soul">ATK +{cat.weapon.base_atk}</p>
+                      <p className="flex items-center gap-1 text-[9px] text-abyss-soul">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={ATK_ICON_URL} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                        +{cat.weapon.base_atk}
+                      </p>
                     ) : null}
                     {cat?.armor ? (
-                      <p className="text-[9px] text-abyss-soul">DEF +{cat.armor.base_def}</p>
+                      <p className="flex items-center gap-1 text-[9px] text-abyss-soul">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={DEF_ICON_URL} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                        +{cat.armor.base_def}
+                      </p>
                     ) : null}
                   </div>
                 </button>
