@@ -38,7 +38,9 @@ export async function buildRoomStateForCharacter(
 
   const { data: character, error: charErr } = await supabase
     .from("characters")
-    .select("id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir")
+    .select(
+      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step",
+    )
     .eq("id", characterId)
     .eq("is_active", true)
     .maybeSingle();
@@ -66,35 +68,51 @@ export async function buildRoomStateForCharacter(
     if (setErr) return { ok: false, error: { kind: "DB_FAILED", detail: setErr.message } };
   }
 
-  const [roomRes, connRes, npcRes, classRes, propsRes] = await Promise.all([
-    supabase
-      .from("rooms")
-      .select(
-        "id, floor_number, room_index, name, description, room_type, is_safe, biome_id, tilemap_data",
-      )
-      .eq("id", roomId)
-      .single(),
-    supabase
-      .from("room_connections")
-      .select("direction, to_room_id, is_locked, unlock_requirement")
-      .eq("from_room_id", roomId),
-    supabase
-      .from("room_npcs")
-      .select("npc_id, tile_x, tile_y")
-      .eq("room_id", roomId),
-    supabase
-      .from("classes")
-      .select("id, name, sprite_atlas, animation_atlas, portrait_url")
-      .eq("id", character.class_id)
-      .single(),
-    supabase.from("props").select("id, sprite_url, collision, display_scale, metadata"),
-  ]);
+  const [roomRes, connRes, npcRes, classRes, propsRes, itemsRes, groundRes] =
+    await Promise.all([
+      supabase
+        .from("rooms")
+        .select(
+          "id, floor_number, room_index, name, description, room_type, is_safe, biome_id, tilemap_data",
+        )
+        .eq("id", roomId)
+        .single(),
+      supabase
+        .from("room_connections")
+        .select("direction, to_room_id, is_locked, unlock_requirement")
+        .eq("from_room_id", roomId),
+      supabase
+        .from("room_npcs")
+        .select("npc_id, tile_x, tile_y")
+        .eq("room_id", roomId),
+      supabase
+        .from("classes")
+        .select("id, name, sprite_atlas, animation_atlas, portrait_url")
+        .eq("id", character.class_id)
+        .single(),
+      supabase.from("props").select("id, sprite_url, collision, display_scale, metadata"),
+      // Character's items (inventory grid + equipped slots in one query).
+      supabase
+        .from("character_items")
+        .select("id, item_id, inventory_slot, equipped_slot, quantity, durability, metadata")
+        .eq("character_id", character.id),
+      // Loose items lying on the floor in the current room, visible to this
+      // character (NULL = public, otherwise scoped to a single character —
+      // tutorial drops use this scoping so other players never see them).
+      supabase
+        .from("room_ground_items")
+        .select("id, item_id, position_x, position_y, quantity, metadata, visible_to_character_id")
+        .eq("room_id", roomId)
+        .or(`visible_to_character_id.is.null,visible_to_character_id.eq.${character.id}`),
+    ]);
 
   if (roomRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: roomRes.error.message } };
   if (connRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: connRes.error.message } };
   if (npcRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: npcRes.error.message } };
   if (classRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: classRes.error.message } };
   if (propsRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: propsRes.error.message } };
+  if (itemsRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: itemsRes.error.message } };
+  if (groundRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: groundRes.error.message } };
 
   const room = roomRes.data;
   const connections = connRes.data ?? [];
@@ -264,6 +282,47 @@ export async function buildRoomStateForCharacter(
       { onConflict: "character_id,room_id" },
     );
 
+  // Split the character_items rows into inventory vs equipped buckets.
+  type RawItem = {
+    id: string;
+    item_id: string;
+    inventory_slot: number | null;
+    equipped_slot: string | null;
+    quantity: number;
+    durability: number | null;
+    metadata: Record<string, unknown>;
+  };
+  const itemRows = (itemsRes.data ?? []) as RawItem[];
+  const inventory = itemRows
+    .filter((r) => r.inventory_slot !== null)
+    .map((r) => ({
+      id: r.id,
+      item_id: r.item_id,
+      slot: r.inventory_slot as number,
+      quantity: r.quantity,
+      durability: r.durability,
+      metadata: r.metadata,
+    }));
+  const equipped = itemRows
+    .filter((r) => r.equipped_slot !== null)
+    .map((r) => ({
+      id: r.id,
+      item_id: r.item_id,
+      slot: r.equipped_slot as string,
+      quantity: r.quantity,
+      durability: r.durability,
+      metadata: r.metadata,
+    }));
+
+  const groundItems = (groundRes.data ?? []).map((g) => ({
+    id: g.id as string,
+    item_id: g.item_id as string,
+    x: g.position_x as number,
+    y: g.position_y as number,
+    quantity: (g.quantity as number) ?? 1,
+    metadata: (g.metadata as Record<string, unknown>) ?? {},
+  }));
+
   return {
     ok: true,
     data: {
@@ -287,7 +346,11 @@ export async function buildRoomStateForCharacter(
         animation_atlas:
           (klass.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
         portrait_url: (klass.portrait_url as string | null) ?? null,
+        tutorial_step: (character.tutorial_step as string | null) ?? "complete",
       },
+      inventory,
+      equipped,
+      ground_items: groundItems,
       connections: connections.map((c) => ({
         direction: c.direction,
         to_room_id: c.to_room_id,

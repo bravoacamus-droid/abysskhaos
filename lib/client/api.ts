@@ -202,6 +202,50 @@ export type RoomProp = {
   metadata: Record<string, unknown>;
 };
 
+/** Where the player is in the first-login tutorial. 'complete' = free play. */
+export type TutorialStep =
+  | "walk_to_cedric"
+  | "after_dialogue"
+  | "pickup_sword"
+  | "equip_sword"
+  | "complete";
+
+/** Equipped slot keys — must match the CHECK constraint in
+ *  `20260528000001_phase3d_inventory_tutorial.sql`. */
+export type EquippedSlot =
+  | "main_hand"
+  | "off_hand"
+  | "armor_head"
+  | "armor_chest"
+  | "armor_arms"
+  | "armor_legs"
+  | "armor_feet"
+  | "accessory_ring_1"
+  | "accessory_ring_2"
+  | "accessory_amulet";
+
+export type CharacterItem = {
+  /** UUID of the character_items row (per-instance, NOT the catalog item_id). */
+  id: string;
+  /** Catalog item id (items_master.id). */
+  item_id: string;
+  /** For inventory items: 0-39 grid slot. For equipped items: the slot key. */
+  slot: number | EquippedSlot;
+  quantity: number;
+  durability: number | null;
+  metadata: Record<string, unknown>;
+};
+
+export type GroundItem = {
+  /** UUID of the room_ground_items row. */
+  id: string;
+  item_id: string;
+  x: number;
+  y: number;
+  quantity: number;
+  metadata: Record<string, unknown>;
+};
+
 export type RoomState = {
   room: {
     id: string;
@@ -226,7 +270,14 @@ export type RoomState = {
     sprite_atlas: SpriteAtlas | null;
     animation_atlas: AnimationAtlas | null;
     portrait_url: string | null;
+    tutorial_step: TutorialStep;
   };
+  /** Items in the character's backpack grid (slot 0-39). */
+  inventory: CharacterItem[];
+  /** Items currently equipped in slot_type slots. */
+  equipped: CharacterItem[];
+  /** Loose items lying on the floor in the current room, visible to this char. */
+  ground_items: GroundItem[];
   connections: RoomConnectionRow[];
   npcs: RoomNpc[];
   props: RoomProp[];
