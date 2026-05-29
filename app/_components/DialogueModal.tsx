@@ -36,15 +36,28 @@ export default function DialogueModal({ initData, characterId, npc, locale, onCl
     return () => ac.abort();
   }, [initData, characterId, npc.id, locale]);
 
+  const [closing, setClosing] = useState(false);
+
   function advance() {
     if (!lines) return;
     if (index < lines.length - 1) {
       setIndex(index + 1);
-    } else {
-      // Final line — mark read and close.
-      void markDialogueRead({ initData, characterId, npcId: npc.id }).catch(() => {});
-      onClose();
+      return;
     }
+    // Final line — AWAIT the mark-read POST before firing onClose so
+    // the parent's followup fetchRoom doesn't race the server's
+    // tutorial-step advance. Without the await, the parent could refetch
+    // BEFORE the dialogue end has been persisted and tutorial_step
+    // stays at walk_to_cedric — manifesting as "screen freezes, banner
+    // still says walk to cedric, can't move because Cedric blocks you".
+    if (closing) return;
+    setClosing(true);
+    void markDialogueRead({ initData, characterId, npcId: npc.id })
+      .catch(() => {})
+      .finally(() => {
+        setClosing(false);
+        onClose();
+      });
   }
 
   return (

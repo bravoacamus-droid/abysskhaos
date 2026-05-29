@@ -33,9 +33,11 @@ export type TutorialStep =
   | "complete";
 
 /** Where the starter sword lands when Cedric gives it.
- *  Hardcoded to r01's mid-back position — narratively "behind" the
- *  player who has just walked south to talk to Cedric. */
-const TUTORIAL_SWORD_TILE = { x: 6, y: 3 };
+ *  Player spawns at (6, 9) by the south arch and walks NORTH (up) to
+ *  Cedric at (6, 5). After dialogue, sword drops at (6, 7) — south of
+ *  the player (who's at 6, 6 facing north), so it appears "behind"
+ *  them and they must turn around to pick it up. */
+const TUTORIAL_SWORD_TILE = { x: 6, y: 7 };
 const TUTORIAL_SWORD_ITEM_ID = "starter_iron_sword";
 const CEDRIC_NPC_ID = "cedric_the_broken";
 

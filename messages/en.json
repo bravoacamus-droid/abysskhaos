@@ -92,7 +92,7 @@
   },
   "tutorial": {
     "step": {
-      "walk_to_cedric": "Walk to Cedric",
+      "walk_to_cedric": "Walk up to Cedric",
       "after_dialogue": "Take the sword Cedric left for you",
       "pickup_sword": "Step on the sword and press Z",
       "equip_sword": "Equip the sword in your main hand"

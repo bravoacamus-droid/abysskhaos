@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
+  devResetTutorial,
   equipItem,
   fetchRoom,
   moveCharacter,
@@ -30,6 +31,9 @@ type Props = {
 };
 
 const BANNER_DURATION_MS = 2200;
+/** DEV ONLY — when true, the tutorial state is wiped on every app
+ *  open so we can keep retesting. Flip to false before shipping. */
+const TUTORIAL_DEV_RESET = true;
 
 export default function PhaserExploration({
   initData,
@@ -60,7 +64,7 @@ export default function PhaserExploration({
   // player is allowed to actually move. null = free play (all 4).
   const allowedDirsForStep: Set<Direction> | null = useMemo(() => {
     const step: TutorialStep = state?.player.tutorial_step ?? "complete";
-    if (step === "walk_to_cedric") return new Set<Direction>(["south"]);
+    if (step === "walk_to_cedric") return new Set<Direction>(["north"]);
     if (step === "after_dialogue" || step === "pickup_sword") {
       return new Set<Direction>(["north", "south", "east", "west"]);
     }
@@ -83,6 +87,16 @@ export default function PhaserExploration({
 
     async function boot() {
       try {
+        // DEV: wipe tutorial state on every boot so the flow restarts
+        // from scratch. Removed once the tutorial is locked in.
+        if (TUTORIAL_DEV_RESET) {
+          try {
+            await devResetTutorial({ initData, characterId });
+          } catch {
+            // best-effort — if the reset fails the room load still
+            // proceeds, just with whatever state is already there
+          }
+        }
         const initial = await fetchRoom({ initData, characterId, locale });
         if (cancelled) return;
         stateRef.current = initial;

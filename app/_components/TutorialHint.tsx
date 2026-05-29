@@ -18,7 +18,7 @@ export function TutorialHint({ step, locale }: Props) {
   const text = t(locale, `tutorial.step.${step}`);
   const icon =
     step === "walk_to_cedric"
-      ? "↓"
+      ? "↑"
       : step === "pickup_sword" || step === "after_dialogue"
         ? "Z"
         : step === "equip_sword"

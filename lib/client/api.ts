@@ -394,3 +394,14 @@ export function unequipItem(
     signal: opts.signal,
   });
 }
+
+/** DEV ONLY — wipes tutorial state so the sequence can be retested on
+ *  every app open. Will be removed once the tutorial flow is locked. */
+export function devResetTutorial(
+  opts: FetchOpts & { characterId: string },
+): Promise<{ ok: boolean }> {
+  return call(`/api/v1/characters/${opts.characterId}/dev-reset-tutorial`, "POST", {
+    initData: opts.initData,
+    signal: opts.signal,
+  });
+}

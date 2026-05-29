@@ -92,7 +92,7 @@
   },
   "tutorial": {
     "step": {
-      "walk_to_cedric": "Camina hacia Cedric",
+      "walk_to_cedric": "Sube hasta Cedric",
       "after_dialogue": "Toma la espada que Cedric te dejó",
       "pickup_sword": "Acércate a la espada y presiona Z",
       "equip_sword": "Equipa la espada en tu mano principal"

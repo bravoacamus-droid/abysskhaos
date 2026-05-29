@@ -117,7 +117,7 @@ const TILEMAPS: Record<string, TilemapData> = {
       // stone arch sprite reads as "carved INTO the wall" rather than
       // hovering in a 3-tile-wide opening with grass visible around it.
     ],
-    spawn: { x: 6, y: 2 },
+    spawn: { x: 6, y: 9 },
     exits: { south: { x: 6, y: 10 } },
     props: [
       // Left tree stays cave_tree; right tree uses cave_tree_large for
