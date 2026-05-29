@@ -90,6 +90,38 @@
     "dialogue_close": "End",
     "talk_prompt": "Tap to speak"
   },
+  "tutorial": {
+    "step": {
+      "walk_to_cedric": "Walk to Cedric",
+      "after_dialogue": "Take the sword Cedric left for you",
+      "pickup_sword": "Step on the sword and press Z",
+      "equip_sword": "Equip the sword in your main hand"
+    },
+    "pickup_prompt": "Z to pick up"
+  },
+  "inventory": {
+    "title": "Inventory",
+    "open_hint": "I",
+    "close": "Close",
+    "tab_inventory": "Backpack",
+    "tab_equipped": "Equipped",
+    "tab_stats": "Stats",
+    "empty_slot": "Empty",
+    "equip_action": "Equip",
+    "unequip_action": "Unequip",
+    "slot": {
+      "main_hand": "Main hand",
+      "off_hand": "Off hand",
+      "armor_head": "Head",
+      "armor_chest": "Chest",
+      "armor_arms": "Arms",
+      "armor_legs": "Legs",
+      "armor_feet": "Feet",
+      "accessory_ring_1": "Ring 1",
+      "accessory_ring_2": "Ring 2",
+      "accessory_amulet": "Amulet"
+    }
+  },
   "errors": {
     "generic": "Something went wrong",
     "INVALID_NAME": "Invalid character name.",

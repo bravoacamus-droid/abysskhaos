@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
+  equipItem,
   fetchRoom,
   moveCharacter,
+  pickupGroundItem,
+  unequipItem,
   type Direction,
+  type EquippedSlot,
   type RoomNpc,
   type RoomState,
+  type TutorialStep,
 } from "@/lib/client/api";
 import { t, type Locale } from "@/lib/i18n";
 
 import DialogueModal from "./DialogueModal";
+import { TutorialHint } from "./TutorialHint";
+import { InventoryPanel } from "./InventoryPanel";
 
 type Props = {
   initData: string;
@@ -42,6 +49,24 @@ export default function PhaserExploration({
   const [adjacentNpc, setAdjacentNpc] = useState<RoomNpc | null>(null);
   const [activeNpc, setActiveNpc] = useState<RoomNpc | null>(null);
   const [moving, setMoving] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+  const [showPickupPrompt, setShowPickupPrompt] = useState(false);
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  /** When true the inventory is open AND can't be closed (tutorial
+   *  step equip_sword). Hides the X button and ignores ESC. */
+  const inventoryForced = state?.player.tutorial_step === "equip_sword";
+
+  // Translate the current tutorial step to the set of directions the
+  // player is allowed to actually move. null = free play (all 4).
+  const allowedDirsForStep: Set<Direction> | null = useMemo(() => {
+    const step: TutorialStep = state?.player.tutorial_step ?? "complete";
+    if (step === "walk_to_cedric") return new Set<Direction>(["south"]);
+    if (step === "after_dialogue" || step === "pickup_sword") {
+      return new Set<Direction>(["north", "south", "east", "west"]);
+    }
+    if (step === "equip_sword") return new Set<Direction>();
+    return null;
+  }, [state?.player.tutorial_step]);
 
   // Boot Phaser once. doMove is captured via closure → fine to skip dep.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,6 +107,10 @@ export default function PhaserExploration({
             const npc =
               cur && npcId ? cur.npcs.find((n) => n.id === npcId) ?? null : null;
             setAdjacentNpc(npc);
+          },
+          onGroundItemPickup: (groundItemId: string) => {
+            if (cancelled) return;
+            void doPickup(groundItemId);
           },
         };
 
@@ -215,6 +244,122 @@ export default function PhaserExploration({
     scene?.setVirtualDirection?.(direction);
   }
 
+  async function doPickup(groundItemId: string) {
+    setPendingItemId(groundItemId);
+    try {
+      const resp = await pickupGroundItem({
+        initData,
+        characterId,
+        groundItemId,
+        locale,
+      });
+      const next = resp.room_state;
+      stateRef.current = next;
+      setState(next);
+      const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
+      scene?.loadRoom?.(next);
+      // After pickup, the sword is in the inventory and tutorial step
+      // advances to equip_sword. The inventory will force-open via the
+      // inventoryForced computed flag.
+    } catch (err) {
+      setError(humanize(err, locale));
+    } finally {
+      setPendingItemId(null);
+    }
+  }
+
+  async function doEquip(characterItemId: string, slot: EquippedSlot) {
+    setPendingItemId(characterItemId);
+    try {
+      const resp = await equipItem({
+        initData,
+        characterId,
+        characterItemId,
+        slot,
+        locale,
+      });
+      const next = resp.room_state;
+      stateRef.current = next;
+      setState(next);
+      // After the equip succeeds, if the tutorial just completed we
+      // auto-close the inventory so the player returns to free play.
+      if (next.player.tutorial_step === "complete") {
+        setShowInventory(false);
+      }
+    } catch (err) {
+      setError(humanize(err, locale));
+    } finally {
+      setPendingItemId(null);
+    }
+  }
+
+  async function doUnequip(characterItemId: string) {
+    setPendingItemId(characterItemId);
+    try {
+      const resp = await unequipItem({ initData, characterId, characterItemId, locale });
+      stateRef.current = resp.room_state;
+      setState(resp.room_state);
+    } catch (err) {
+      setError(humanize(err, locale));
+    } finally {
+      setPendingItemId(null);
+    }
+  }
+
+  // ── Tutorial-driven side effects ────────────────────────────────────
+
+  // Push the allowed direction set down into the Phaser scene whenever
+  // the tutorial step changes. Scene silently ignores disallowed dirs.
+  useEffect(() => {
+    const scene = sceneRef.current as {
+      setAllowedDirections?: (s: Set<Direction> | null) => void;
+    } | null;
+    scene?.setAllowedDirections?.(allowedDirsForStep);
+  }, [allowedDirsForStep, state]);
+
+  // Auto-open dialogue when the player walks up to Cedric during
+  // walk_to_cedric — the player shouldn't have to discover the talk
+  // button on their first run.
+  useEffect(() => {
+    if (!state || !adjacentNpc) return;
+    if (state.player.tutorial_step !== "walk_to_cedric") return;
+    if (adjacentNpc.id !== "cedric_the_broken") return;
+    setActiveNpc(adjacentNpc);
+  }, [adjacentNpc, state]);
+
+  // Force the inventory open when the tutorial requires equipping.
+  useEffect(() => {
+    if (inventoryForced) setShowInventory(true);
+  }, [inventoryForced]);
+
+  // Show / hide the floor "Z to pick up" prompt based on adjacency.
+  // Polled because Phaser's adjacency calc happens inside attemptMove,
+  // not as a React event. A short interval is cheap.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const scene = sceneRef.current as {
+        getAdjacentGroundItemId?: () => string | null;
+      } | null;
+      setShowPickupPrompt(!!scene?.getAdjacentGroundItemId?.());
+    }, 150);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // Hotkeys: I toggles the inventory (unless forced), ESC closes it.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "i" || e.key === "I") {
+        if (inventoryForced) return;
+        setShowInventory((s) => !s);
+      } else if (e.key === "Escape") {
+        if (inventoryForced) return;
+        setShowInventory(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inventoryForced]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between rounded-md border border-abyss-coal/80 bg-abyss-deep px-3 py-2">
@@ -296,6 +441,39 @@ export default function PhaserExploration({
           <DPad onPress={dpadPress} onHold={dpadHold} disabled={moving} />
         </div>
 
+        {/* Inventory toggle (top-left) — visible when not in tutorial,
+            disabled during tutorial steps that gate it. */}
+        {state && !inventoryForced ? (
+          <button
+            type="button"
+            onClick={() => setShowInventory(true)}
+            className="absolute left-2 bottom-2 z-30 flex h-12 w-12 items-center justify-center rounded-md border-2 border-abyss-soul/70 bg-abyss-deep/95 text-2xl text-abyss-soul shadow-lg backdrop-blur hover:bg-abyss-coal/60"
+            aria-label={t(locale, "inventory.title")}
+            title={`${t(locale, "inventory.title")} (I)`}
+          >
+            🎒
+          </button>
+        ) : null}
+
+        {/* Tutorial hint banner — shows the current step. */}
+        {state ? (
+          <TutorialHint step={state.player.tutorial_step} locale={locale} />
+        ) : null}
+
+        {/* "Z to pick up" floor prompt when standing next to a ground item. */}
+        {showPickupPrompt ? (
+          <div className="pointer-events-none absolute bottom-20 left-1/2 z-30 -translate-x-1/2">
+            <div className="flex items-center gap-2 rounded border-2 border-abyss-soul/80 bg-abyss-deep/95 px-3 py-1.5 shadow-lg backdrop-blur">
+              <span className="flex h-6 w-6 items-center justify-center rounded border border-abyss-soul/60 bg-abyss-void text-sm font-bold text-abyss-soul">
+                Z
+              </span>
+              <span className="text-xs font-semibold text-white">
+                {t(locale, "tutorial.pickup_prompt")}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center bg-abyss-void/80 p-6 text-center">
             <p className="text-sm text-abyss-ember">{error}</p>
@@ -325,6 +503,18 @@ export default function PhaserExploration({
               // best-effort
             }
           }}
+        />
+      ) : null}
+
+      {showInventory && state ? (
+        <InventoryPanel
+          state={state}
+          locale={locale}
+          forced={inventoryForced}
+          pendingItemId={pendingItemId}
+          onClose={() => setShowInventory(false)}
+          onEquip={(id, slot) => void doEquip(id, slot)}
+          onUnequip={(id) => void doUnequip(id)}
         />
       ) : null}
     </div>

@@ -94,6 +94,10 @@ const tilesetKeyFor = (biomeId: string, url: string) => {
 export type SceneCallbacks = {
   onExitRequested?: (direction: Direction) => void;
   onNpcAdjacent?: (npcId: string | null) => void;
+  /** Fired when the Z key is pressed AND the player is on / adjacent
+   *  to a ground item. Passes the room_ground_items.id; React handles
+   *  the /pickup API call. */
+  onGroundItemPickup?: (groundItemId: string) => void;
 };
 
 export type SceneInitData = { state: RoomState; callbacks?: SceneCallbacks };
@@ -120,7 +124,15 @@ export class AbyssScene extends Phaser.Scene {
   private playerAnimState: AnimState = "idle";
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
+  private zKey?: Phaser.Input.Keyboard.Key;
   private booted = false;
+  /** If non-null, only these directions are allowed during the tutorial.
+   *  attemptMove silently ignores any other direction. */
+  private allowedDirections: Set<Direction> | null = null;
+  /** Item id of the ground item the player can currently grab with Z
+   *  (the player is standing on or directly adjacent to). null = no
+   *  pickup available right now. */
+  private adjacentGroundItemId: string | null = null;
 
   constructor() {
     super(AbyssScene.KEY);
@@ -303,6 +315,20 @@ export class AbyssScene extends Phaser.Scene {
       }
       queued.push(...this.queueAnimationAssets(`npc-${npc.id}`, npc.animation_atlas ?? null));
     }
+
+    // Ground items: queue each unique item icon (from the catalog). One
+    // texture per item kind, regardless of how many copies are on the
+    // floor in this room.
+    for (const g of s.ground_items ?? []) {
+      const cat = s.item_catalog[g.item_id];
+      const iconUrl = cat?.icon_path;
+      if (!iconUrl) continue;
+      const key = `ground-item-${g.item_id}`;
+      if (!this.textures.exists(key)) {
+        this.load.image(key, iconUrl);
+        queued.push(key);
+      }
+    }
     return queued;
   }
 
@@ -398,6 +424,16 @@ export class AbyssScene extends Phaser.Scene {
     if (!this.input.keyboard) return;
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys("W,A,S,D") as typeof this.wasd;
+    this.zKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
+    this.zKey.on("down", () => this.tryGroundPickup());
+  }
+
+  /** Called by the Z key handler. If the player is currently adjacent
+   *  to a ground item, fire the React callback (which makes the
+   *  /pickup API call). */
+  private tryGroundPickup() {
+    if (!this.adjacentGroundItemId) return;
+    this.callbacks.onGroundItemPickup?.(this.adjacentGroundItemId);
   }
 
   private buildRoomFromState() {
@@ -601,6 +637,40 @@ export class AbyssScene extends Phaser.Scene {
       }
     }
 
+    // Ground items: render each loose item as a sprite with a soft
+    // elliptical shadow underneath + a gentle bobbing tween so it
+    // reads as "lying on the floor, please pick me up". The shadow
+    // is depth 1 (below the player), the item sprite at depth 3.
+    for (const g of s.ground_items ?? []) {
+      const key = `ground-item-${g.item_id}`;
+      if (!this.textures.exists(key)) continue;
+      const cx = g.x * RENDERED_TILE + RENDERED_TILE / 2;
+      const cy = g.y * RENDERED_TILE + RENDERED_TILE / 2;
+      // Shadow first, so the item sits on top of it.
+      const shadow = this.add
+        .ellipse(cx, cy + RENDERED_TILE * 0.18, RENDERED_TILE * 0.55, RENDERED_TILE * 0.18, 0x000000, 0.55)
+        .setDepth(1);
+      this.roomDecor.push(shadow);
+      // Item sprite, with a bobbing y tween. Each ground item gets its
+      // own tween so a room with multiple drops doesn't sync them.
+      const sprite = this.add
+        .image(cx, cy, key)
+        .setOrigin(0.5, 0.5)
+        .setScale(0.7)
+        .setDepth(3);
+      this.roomDecor.push(sprite);
+      const baseY = cy - RENDERED_TILE * 0.05;
+      sprite.y = baseY;
+      this.tweens.add({
+        targets: sprite,
+        y: { from: baseY - 2, to: baseY + 2 },
+        duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    }
+
     // Server-side connections are the source of truth. If the client's
     // cached tilemap_data has an exit cell that the server doesn't have
     // a connection for, we silently ignore it — no door, no exit
@@ -629,7 +699,9 @@ export class AbyssScene extends Phaser.Scene {
     }
 
     this.adjacentNpcId = null;
+    this.adjacentGroundItemId = null;
     this.checkNpcAdjacency();
+    this.checkGroundAdjacency();
 
     // If the scene already booted, this is a room transition — fade
     // the new room in from black. The matching fadeOut was kicked
@@ -720,6 +792,15 @@ export class AbyssScene extends Phaser.Scene {
     const map = this.state.room.tilemap_data;
     if (!map) return;
 
+    // Tutorial gating: if React has narrowed the allowed direction set
+    // (e.g. only south during walk_to_cedric), silently ignore other
+    // directions. The player can still turn-in-place via setPlayerFacing
+    // below — they just can't commit a step.
+    if (this.allowedDirections && !this.allowedDirections.has(dir)) {
+      this.setPlayerAnimState("idle");
+      return;
+    }
+
     if (this.playerDir !== dir) {
       this.setPlayerFacing(dir);
     }
@@ -752,6 +833,7 @@ export class AbyssScene extends Phaser.Scene {
     }
     this.setPlayerAnimState("walk");
     this.checkNpcAdjacency();
+    this.checkGroundAdjacency();
 
     // Did we land on an exit tile? If so, fire the transition trigger.
     // React-side doMove awaits at least MOVE_TWEEN_MS before calling
@@ -785,5 +867,33 @@ export class AbyssScene extends Phaser.Scene {
       this.adjacentNpcId = adj;
       this.callbacks.onNpcAdjacent?.(adj);
     }
+  }
+
+  /** Update which ground item the player can grab with Z right now.
+   *  "Adjacent" includes the player's own tile (stepping on the item
+   *  also picks it up). */
+  private checkGroundAdjacency() {
+    let adj: string | null = null;
+    for (const g of this.state.ground_items ?? []) {
+      const dx = Math.abs(g.x - this.playerTile.x);
+      const dy = Math.abs(g.y - this.playerTile.y);
+      if (dx + dy <= 1) {
+        adj = g.id;
+        break;
+      }
+    }
+    this.adjacentGroundItemId = adj;
+  }
+
+  /** React calls this with the set of directions allowed by the
+   *  current tutorial step. Pass null (default) for free play. */
+  setAllowedDirections(dirs: Set<Direction> | null) {
+    this.allowedDirections = dirs;
+  }
+
+  /** React calls this to query whether the player can pick something
+   *  up right now — used to render the "Z to pick up" HUD prompt. */
+  getAdjacentGroundItemId(): string | null {
+    return this.adjacentGroundItemId;
   }
 }
