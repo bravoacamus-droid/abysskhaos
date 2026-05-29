@@ -103,12 +103,29 @@
     "title": "Inventory",
     "open_hint": "I",
     "close": "Close",
-    "tab_inventory": "Backpack",
-    "tab_equipped": "Equipped",
+    "tab_inventory": "Bag",
+    "tab_equipped": "Gear",
     "tab_stats": "Stats",
     "empty_slot": "Empty",
+    "empty_category": "No items in this category",
     "equip_action": "Equip",
     "unequip_action": "Unequip",
+    "no_compatible_items": "You have nothing compatible with this slot",
+    "category": {
+      "all": "All",
+      "weapon": "Weapons",
+      "armor": "Armor",
+      "accessory": "Accessories",
+      "consumable": "Consumables",
+      "gem": "Gems",
+      "quest": "Quest",
+      "misc": "Misc"
+    },
+    "handedness": {
+      "one_handed": "One-handed",
+      "two_handed": "Two-handed",
+      "off_hand": "Off-hand"
+    },
     "slot": {
       "main_hand": "Main hand",
       "off_hand": "Off hand",
@@ -121,6 +138,20 @@
       "accessory_ring_2": "Ring 2",
       "accessory_amulet": "Amulet"
     }
+  },
+  "stats": {
+    "hp": "HP",
+    "mp": "MP",
+    "atk": "ATK",
+    "def": "DEF",
+    "level": "Level",
+    "exp": "Experience",
+    "class": "Class",
+    "path": "Path",
+    "title": "Title",
+    "section_combat": "Combat",
+    "section_attrs": "Primary attributes",
+    "section_progress": "Progression"
   },
   "errors": {
     "generic": "Something went wrong",

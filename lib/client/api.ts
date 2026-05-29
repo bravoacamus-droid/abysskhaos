@@ -278,10 +278,30 @@ export type RoomState = {
   } | null;
   player: {
     class_id: string;
+    class_name: string;
     sprite_atlas: SpriteAtlas | null;
     animation_atlas: AnimationAtlas | null;
     portrait_url: string | null;
     tutorial_step: TutorialStep;
+    // Full character profile + combat stats — used by the inventory /
+    // stats panels. Server-authoritative so the UI never goes out of
+    // sync with the actual character row.
+    name: string;
+    level: number;
+    exp: number;
+    hp_current: number;
+    hp_max: number;
+    mp_current: number;
+    mp_max: number;
+    atk: number;
+    def: number;
+    attr_strength: number;
+    attr_agility: number;
+    attr_intelligence: number;
+    attr_spirit: number;
+    title_id: string | null;
+    path_id: string | null;
+    khryn: number;
   };
   /** Items in the character's backpack grid (slot 0-39). */
   inventory: CharacterItem[];

@@ -104,16 +104,33 @@
     "open_hint": "I",
     "close": "Cerrar",
     "tab_inventory": "Mochila",
-    "tab_equipped": "Equipado",
+    "tab_equipped": "Equipo",
     "tab_stats": "Atributos",
     "empty_slot": "Vacío",
+    "empty_category": "Sin objetos en esta categoría",
     "equip_action": "Equipar",
     "unequip_action": "Desequipar",
+    "no_compatible_items": "No tienes objetos compatibles con este slot",
+    "category": {
+      "all": "Todo",
+      "weapon": "Armas",
+      "armor": "Armadura",
+      "accessory": "Accesorios",
+      "consumable": "Consumibles",
+      "gem": "Gemas",
+      "quest": "Misión",
+      "misc": "Otros"
+    },
+    "handedness": {
+      "one_handed": "Una mano",
+      "two_handed": "Dos manos",
+      "off_hand": "Mano secundaria"
+    },
     "slot": {
       "main_hand": "Mano principal",
       "off_hand": "Mano secundaria",
       "armor_head": "Cabeza",
-      "armor_chest": "Pecho",
+      "armor_chest": "Torso",
       "armor_arms": "Brazos",
       "armor_legs": "Piernas",
       "armor_feet": "Pies",
@@ -121,6 +138,20 @@
       "accessory_ring_2": "Anillo 2",
       "accessory_amulet": "Amuleto"
     }
+  },
+  "stats": {
+    "hp": "PV",
+    "mp": "PM",
+    "atk": "ATQ",
+    "def": "DEF",
+    "level": "Nivel",
+    "exp": "Experiencia",
+    "class": "Clase",
+    "path": "Vía",
+    "title": "Título",
+    "section_combat": "Combate",
+    "section_attrs": "Atributos primarios",
+    "section_progress": "Progresión"
   },
   "errors": {
     "generic": "Algo salió mal",

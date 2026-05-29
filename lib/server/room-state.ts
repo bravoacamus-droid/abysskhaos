@@ -39,7 +39,7 @@ export async function buildRoomStateForCharacter(
   const { data: character, error: charErr } = await supabase
     .from("characters")
     .select(
-      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step",
+      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step, name, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, title_id, path_id, khryn",
     )
     .eq("id", characterId)
     .eq("is_active", true)
@@ -411,11 +411,30 @@ export async function buildRoomStateForCharacter(
       biome,
       player: {
         class_id: klass.id,
+        class_name: klass.name as string,
         sprite_atlas: (klass.sprite_atlas as Record<string, string> | null) ?? null,
         animation_atlas:
           (klass.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
         portrait_url: (klass.portrait_url as string | null) ?? null,
         tutorial_step: (character.tutorial_step as string | null) ?? "complete",
+        // Full character profile + combat stats — exposed so the
+        // Equip / Stats panels can render without extra round-trips.
+        name: (character.name as string | null) ?? "",
+        level: (character.level as number | null) ?? 1,
+        exp: (character.exp as number | null) ?? 0,
+        hp_current: (character.hp_current as number | null) ?? 0,
+        hp_max: (character.hp_max as number | null) ?? 0,
+        mp_current: (character.mp_current as number | null) ?? 0,
+        mp_max: (character.mp_max as number | null) ?? 0,
+        atk: (character.atk as number | null) ?? 0,
+        def: (character.def as number | null) ?? 0,
+        attr_strength: (character.attr_strength as number | null) ?? 0,
+        attr_agility: (character.attr_agility as number | null) ?? 0,
+        attr_intelligence: (character.attr_intelligence as number | null) ?? 0,
+        attr_spirit: (character.attr_spirit as number | null) ?? 0,
+        title_id: (character.title_id as string | null) ?? null,
+        path_id: (character.path_id as string | null) ?? null,
+        khryn: (character.khryn as number | null) ?? 0,
       },
       inventory,
       equipped,
