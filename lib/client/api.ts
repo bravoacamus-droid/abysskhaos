@@ -246,6 +246,17 @@ export type GroundItem = {
   metadata: Record<string, unknown>;
 };
 
+export type ItemCatalogEntry = {
+  id: string;
+  name: string;
+  name_localized: string;
+  item_type: "weapon" | "armor" | "accessory" | "consumable" | "gem" | "quest" | "misc";
+  icon_path: string | null;
+  weapon: { handedness: string; base_atk: number } | null;
+  armor: { slot: string; base_def: number } | null;
+  accessory: { slot: string } | null;
+};
+
 export type RoomState = {
   room: {
     id: string;
@@ -278,6 +289,10 @@ export type RoomState = {
   equipped: CharacterItem[];
   /** Loose items lying on the floor in the current room, visible to this char. */
   ground_items: GroundItem[];
+  /** Catalog entries for every item_id referenced in inventory/equipped/
+   *  ground_items above. Lets the UI render names + icons + stats without
+   *  N+1 round-trips. Keyed by item_id. */
+  item_catalog: Record<string, ItemCatalogEntry>;
   connections: RoomConnectionRow[];
   npcs: RoomNpc[];
   props: RoomProp[];
@@ -334,9 +349,48 @@ export function fetchDialogue(
 
 export function markDialogueRead(
   opts: FetchOpts & { characterId: string; npcId: string },
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; tutorial_step: TutorialStep | null }> {
   return call(`/api/v1/characters/${opts.characterId}/dialogue/${opts.npcId}`, "POST", {
     initData: opts.initData,
+    signal: opts.signal,
+  });
+}
+
+export function pickupGroundItem(
+  opts: FetchOpts & { characterId: string; groundItemId: string; locale: string },
+): Promise<{ room_state: RoomState }> {
+  return call(`/api/v1/characters/${opts.characterId}/pickup`, "POST", {
+    initData: opts.initData,
+    body: { ground_item_id: opts.groundItemId, locale: opts.locale },
+    signal: opts.signal,
+  });
+}
+
+export function equipItem(
+  opts: FetchOpts & {
+    characterId: string;
+    characterItemId: string;
+    slot: EquippedSlot;
+    locale: string;
+  },
+): Promise<{ room_state: RoomState }> {
+  return call(`/api/v1/characters/${opts.characterId}/equip`, "POST", {
+    initData: opts.initData,
+    body: {
+      character_item_id: opts.characterItemId,
+      slot: opts.slot,
+      locale: opts.locale,
+    },
+    signal: opts.signal,
+  });
+}
+
+export function unequipItem(
+  opts: FetchOpts & { characterId: string; characterItemId: string; locale: string },
+): Promise<{ room_state: RoomState }> {
+  return call(`/api/v1/characters/${opts.characterId}/unequip`, "POST", {
+    initData: opts.initData,
+    body: { character_item_id: opts.characterItemId, locale: opts.locale },
     signal: opts.signal,
   });
 }

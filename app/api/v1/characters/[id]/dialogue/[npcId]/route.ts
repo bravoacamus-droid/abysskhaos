@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { onDialogueCompleted } from "@/lib/server/tutorial";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,5 +132,21 @@ export async function POST(
     );
   if (upErr) return NextResponse.json({ error: "DB_FAILED", detail: upErr.message }, { status: 500 });
 
-  return NextResponse.json({ data: { ok: true } });
+  // Tutorial hook: Cedric's first dialogue ending drops the starter
+  // sword and advances the tutorial step. Idempotent — re-calling this
+  // endpoint after the player already saw it is a no-op.
+  let newTutorialStep: string | null = null;
+  try {
+    newTutorialStep = await onDialogueCompleted(supabase, {
+      characterId: character.id,
+      npcId: params.npcId,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: "TUTORIAL_ADVANCE_FAILED", detail: (err as Error).message },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ data: { ok: true, tutorial_step: newTutorialStep } });
 }

@@ -293,6 +293,75 @@ export async function buildRoomStateForCharacter(
     metadata: Record<string, unknown>;
   };
   const itemRows = (itemsRes.data ?? []) as RawItem[];
+  const groundRows = (groundRes.data ?? []);
+
+  // Hydrate item catalog details (name, icon, type, stats) for every
+  // unique item_id the character touches in this response. Saves the
+  // client from doing N round-trips for "what does this item look
+  // like" lookups.
+  const allItemIds = new Set<string>();
+  for (const r of itemRows) allItemIds.add(r.item_id);
+  for (const g of groundRows) allItemIds.add(g.item_id as string);
+  type ItemCatalogEntry = {
+    id: string;
+    name: string;
+    name_localized: string;
+    item_type: string;
+    icon_path: string | null;
+    weapon: { handedness: string; base_atk: number } | null;
+    armor: { slot: string; base_def: number } | null;
+    accessory: { slot: string } | null;
+  };
+  const catalog: Record<string, ItemCatalogEntry> = {};
+  if (allItemIds.size > 0) {
+    const ids = Array.from(allItemIds);
+    const [mRes, wRes, aRes, acRes, tRes] = await Promise.all([
+      supabase
+        .from("items_master")
+        .select("id, name_es, item_type, icon_path")
+        .in("id", ids),
+      supabase.from("weapons").select("item_id, handedness, base_atk").in("item_id", ids),
+      supabase.from("armor").select("item_id, slot, base_def").in("item_id", ids),
+      supabase.from("accessories").select("item_id, slot").in("item_id", ids),
+      locale !== "en"
+        ? supabase
+            .from("translations")
+            .select("entity_id, field, value")
+            .eq("entity_type", "item")
+            .eq("locale", locale)
+            .in("entity_id", ids)
+        : Promise.resolve({ data: [] as Array<{ entity_id: string; field: string; value: string }>, error: null }),
+    ]);
+    if (mRes.error) return { ok: false, error: { kind: "DB_FAILED", detail: mRes.error.message } };
+    const wMap = new Map((wRes.data ?? []).map((w) => [w.item_id as string, w]));
+    const aMap = new Map((aRes.data ?? []).map((a) => [a.item_id as string, a]));
+    const acMap = new Map((acRes.data ?? []).map((ac) => [ac.item_id as string, ac]));
+    const trMap = new Map<string, string>();
+    for (const t of tRes.data ?? []) {
+      if (t.field === "name") trMap.set(t.entity_id as string, t.value as string);
+    }
+    for (const m of mRes.data ?? []) {
+      const id = m.id as string;
+      const w = wMap.get(id);
+      const a = aMap.get(id);
+      const ac = acMap.get(id);
+      catalog[id] = {
+        id,
+        name: m.name_es as string,
+        name_localized: trMap.get(id) ?? (m.name_es as string),
+        item_type: m.item_type as string,
+        icon_path: (m.icon_path as string | null) ?? null,
+        weapon: w
+          ? { handedness: w.handedness as string, base_atk: w.base_atk as number }
+          : null,
+        armor: a
+          ? { slot: a.slot as string, base_def: a.base_def as number }
+          : null,
+        accessory: ac ? { slot: ac.slot as string } : null,
+      };
+    }
+  }
+
   const inventory = itemRows
     .filter((r) => r.inventory_slot !== null)
     .map((r) => ({
@@ -314,7 +383,7 @@ export async function buildRoomStateForCharacter(
       metadata: r.metadata,
     }));
 
-  const groundItems = (groundRes.data ?? []).map((g) => ({
+  const groundItems = groundRows.map((g) => ({
     id: g.id as string,
     item_id: g.item_id as string,
     x: g.position_x as number,
@@ -351,6 +420,7 @@ export async function buildRoomStateForCharacter(
       inventory,
       equipped,
       ground_items: groundItems,
+      item_catalog: catalog,
       connections: connections.map((c) => ({
         direction: c.direction,
         to_room_id: c.to_room_id,
