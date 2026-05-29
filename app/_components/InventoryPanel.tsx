@@ -247,7 +247,11 @@ export function InventoryPanel({
  * ────────────────────────────────────────────────────────────────── */
 function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) {
   const p = state.player;
-  const spriteUrl = p.sprite_atlas?.south ?? p.portrait_url ?? null;
+  // Use the walking sprite (sprite_atlas.south) — same one the player
+  // sees in-world. NEVER fall back to portrait_url here because the
+  // class portrait shows the warrior holding a sword by default, which
+  // misrepresents what's actually equipped right now.
+  const spriteUrl = p.sprite_atlas?.south ?? null;
   const hpPct = p.hp_max > 0 ? (p.hp_current / p.hp_max) * 100 : 0;
   const mpPct = p.mp_max > 0 ? (p.mp_current / p.mp_max) * 100 : 0;
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -37,6 +37,30 @@ export default function DialogueModal({ initData, characterId, npc, locale, onCl
   }, [initData, characterId, npc.id, locale]);
 
   const [closing, setClosing] = useState(false);
+  /** True once we've POSTed the mark-read for this dialogue. Idempotent
+   *  guard so the close handler can be wired to X / backdrop / final
+   *  Terminar button without firing the POST multiple times. */
+  const markedReadRef = useRef(false);
+
+  /** Single source of truth for closing the modal. EVERY path that
+   *  closes (X button, backdrop click, final Terminar) goes through
+   *  here so the tutorial advance always fires server-side — even if
+   *  the player chose to skip mid-dialogue. Awaits the POST before
+   *  calling onClose so the parent's followup fetchRoom can't race. */
+  async function closeWithMark() {
+    if (closing) return;
+    setClosing(true);
+    if (!markedReadRef.current) {
+      markedReadRef.current = true;
+      try {
+        await markDialogueRead({ initData, characterId, npcId: npc.id });
+      } catch {
+        // best-effort — even if the POST fails we still close the modal
+      }
+    }
+    setClosing(false);
+    onClose();
+  }
 
   function advance() {
     if (!lines) return;
@@ -44,26 +68,13 @@ export default function DialogueModal({ initData, characterId, npc, locale, onCl
       setIndex(index + 1);
       return;
     }
-    // Final line — AWAIT the mark-read POST before firing onClose so
-    // the parent's followup fetchRoom doesn't race the server's
-    // tutorial-step advance. Without the await, the parent could refetch
-    // BEFORE the dialogue end has been persisted and tutorial_step
-    // stays at walk_to_cedric — manifesting as "screen freezes, banner
-    // still says walk to cedric, can't move because Cedric blocks you".
-    if (closing) return;
-    setClosing(true);
-    void markDialogueRead({ initData, characterId, npcId: npc.id })
-      .catch(() => {})
-      .finally(() => {
-        setClosing(false);
-        onClose();
-      });
+    void closeWithMark();
   }
 
   return (
     <div
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/70 p-3 sm:items-center"
-      onClick={onClose}
+      onClick={() => void closeWithMark()}
       role="dialog"
       aria-modal="true"
     >
@@ -93,8 +104,9 @@ export default function DialogueModal({ initData, characterId, npc, locale, onCl
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-md border border-abyss-coal/60 px-2 py-0.5 text-[10px] uppercase tracking-widest text-abyss-fog hover:border-abyss-fog/60 hover:text-abyss-mist"
+            onClick={() => void closeWithMark()}
+            disabled={closing}
+            className="rounded-md border border-abyss-coal/60 px-2 py-0.5 text-[10px] uppercase tracking-widest text-abyss-fog hover:border-abyss-fog/60 hover:text-abyss-mist disabled:opacity-50"
           >
             ✕
           </button>
