@@ -17,6 +17,7 @@ import {
   type TutorialStep,
 } from "@/lib/client/api";
 import { t, type Locale } from "@/lib/i18n";
+import { optimisticEquip, optimisticUnequip } from "@/lib/client/optimistic";
 
 import DialogueModal from "./DialogueModal";
 import { TutorialHint } from "./TutorialHint";
@@ -283,6 +284,18 @@ export default function PhaserExploration({
   }
 
   async function doEquip(characterItemId: string, slot: EquippedSlot) {
+    // Snapshot pre-equip state for rollback if the server rejects the
+    // intent. The optimistic preview lets the UI update INSTANTLY
+    // (item moves into the slot, atk/def adjusts) while the request is
+    // in flight — players were complaining the equip felt sluggish.
+    const snapshot = stateRef.current;
+    if (!snapshot) return;
+    const prevStep = snapshot.player.tutorial_step;
+    const predicted = optimisticEquip(snapshot, characterItemId, slot);
+    if (predicted) {
+      stateRef.current = predicted;
+      setState(predicted);
+    }
     setPendingItemId(characterItemId);
     try {
       const resp = await equipItem({
@@ -295,12 +308,18 @@ export default function PhaserExploration({
       const next = resp.room_state;
       stateRef.current = next;
       setState(next);
-      // After the equip succeeds, if the tutorial just completed we
-      // auto-close the inventory so the player returns to free play.
-      if (next.player.tutorial_step === "complete") {
+      // Auto-close ONLY when this equip is the one that JUST completed
+      // the tutorial (equip_sword → complete). Any later equip leaves
+      // the inventory open so players can keep swapping gear.
+      if (prevStep === "equip_sword" && next.player.tutorial_step === "complete") {
         setShowInventory(false);
       }
     } catch (err) {
+      // Server rejected — undo the optimistic preview.
+      if (predicted) {
+        stateRef.current = snapshot;
+        setState(snapshot);
+      }
       setError(humanize(err, locale));
     } finally {
       setPendingItemId(null);
@@ -308,12 +327,23 @@ export default function PhaserExploration({
   }
 
   async function doUnequip(characterItemId: string) {
+    const snapshot = stateRef.current;
+    if (!snapshot) return;
+    const predicted = optimisticUnequip(snapshot, characterItemId);
+    if (predicted) {
+      stateRef.current = predicted;
+      setState(predicted);
+    }
     setPendingItemId(characterItemId);
     try {
       const resp = await unequipItem({ initData, characterId, characterItemId, locale });
       stateRef.current = resp.room_state;
       setState(resp.room_state);
     } catch (err) {
+      if (predicted) {
+        stateRef.current = snapshot;
+        setState(snapshot);
+      }
       setError(humanize(err, locale));
     } finally {
       setPendingItemId(null);

@@ -1,49 +1,45 @@
 /**
  * UI icon URLs for stats, attributes, categories, and currency.
  *
- * All icons are 32×32 monochrome WHITE pixel-art PNGs hosted in R2
- * (content-hashed). Rendered with <img src> + image-rendering:pixelated.
+ * All icons are 32×32 PixelLab-generated PNGs the user finalized and
+ * tagged 'icon-final' in their PixelLab project (id 8d5dc016-…),
+ * pulled into our R2 (content-hashed, stable) via
+ * `.local-debug/import-pixellab-icons.ts`. Re-run that script if a tag
+ * gets re-pointed.
  *
- * Why monochrome white: the user asked for unified styling — every icon
- * the same colour (#FFFFFF) so they read as a coherent UI element set
- * rather than a circus of palettes. Differentiation is silhouette only.
- *
- * Source: painted procedurally in .local-debug/paint-white-icons.ts so
- * we have full control of colour and glyph (vs PixelLab's tendency to
- * add tints/shading we then have to fight). Rerun that script to add
- * or change icons.
+ * Rendering: <img src> + image-rendering:pixelated for the crisp look.
  */
 
 export const HP_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/6fbec9694bd47826313ca4af08188d0758508718815b95d8fe2ec9b5fcefc899.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/2fb48f00f601e6d0ffebdd2cb7d07c5be4fab12659d6b72928fef2664ded7f42.png";
 export const MP_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/53e47dd21355ae35637e8ca3b0a3e353207c7a862279cbc40516ac2ddd05be03.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/7121244394160eb9d698823d1bf75abd1ba574b0b023711369eeec34578c8fde.png";
 export const ATK_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/fc095644b5aa4b49157280846a87cf4989877a065322276b319b0f35356c1566.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/1b94eda94dc45b6bb156646125d2344d5987ec848543f561f5755d03583a54a3.png";
 export const DEF_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/5ed41018609bdfe7f674e18ae952eadeb7c15dfdeea92abd7b1fdc4c06eff2a6.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/cf70c60c1c94f502cdb07647247943b5aebeadb6d069db5cbe03b9e6a88d7c38.png";
 export const STR_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/3debb2500eca9e2ac550a0d121e94154233f683282980c23232d9d736e67fa27.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/d8fe56383e7183dd9b021ac7a7f5b61ccb92e8c52cfa4a9cd12cd3853b4c3ffd.png";
 export const AGI_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/067010467fec49ca4234c37ee7676848ee46d911c239cc075815ab37ab553a8b.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/5b12d7453e970f75150a787cffa6bd44b02e5b10d6b6f47cf1b97d08a6e6cde7.png";
 export const INT_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/1409172d8265c6137a61094401fbf916579290cb89fabe00ea4fe350a2c0c2d5.png";
-/** Spirit attribute — abbreviated SPI in the canonical attribute seed
- *  (data/seeds/attributes.ts), not SPR. */
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/a4569889e31e508a4ef44f489cb44ad27fb9229f39bd2b32f585628bf1dfeafc.png";
+/** Spirit attribute — abbreviated SPI in the canonical attribute seed. */
 export const SPI_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/153fbfb71a03a24b26058e92d45f167a547a7b5a67b2991202b31d6b20f933ce.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/5f67e748f335f4b329bd7e517d97b3d6b44934c09b5ac0bb1a7b32315c4c556a.png";
 
 export const KHRYN_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/ad8c2cf39a3b56fc145f700a667983eb8a831fc8c511aa0d1e200c1caa32de40.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/1a10d5b4e02523cdf298dbdc8d924d04dfd7804b1a67826d219c7a8ac0709f9c.png";
 
-export const CAT_WEAPON_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/680f1af5f17af42beaa67d5c851159ddc69db24b612ffffb87cfaa6f658252ff.png";
+/** WEAPON category not yet finalized in PixelLab — reusing the ATK
+ *  sword reads correctly for both "weapon category" and "attack stat". */
+export const CAT_WEAPON_ICON_URL = ATK_ICON_URL;
 export const CAT_ARMOR_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/e1e2956dcb6e3e3ef1cd52bac65daa55e3e8692ef1994b9e7e7e1f76ce9c2dd2.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/72c8f68c0356d523a83b95d29ac7dd48f8f5affcbaa67178d91a4424cf6e6984.png";
 export const CAT_ACCESSORY_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/7a658a56bdb3189c8b06c65b7360a78accdc4dcc836580400d94e121e4eefda6.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/eaa65e0c4d530f6d237254de35155e35932c021be2efd3983fcb500ad283301a.png";
 export const CAT_CONSUMABLE_ICON_URL =
-  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/033a97a8737fe5809ba8f270f48b2b94cdce65f3be2b199a2e02376cbf9f36c6.png";
+  "https://pub-6150fe1a62654996b1c27b5f5592904a.r2.dev/assets/596a8e086c1c05a11c44ffb9bdef1dcf1ad22063446c76639d760f37a65650ef.png";
 
 /** Lookup helper — returns the icon URL for an items_master.item_type. */
 export function categoryIconUrl(itemType: string): string | null {

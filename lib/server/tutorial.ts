@@ -70,30 +70,16 @@ export async function onDialogueCompleted(
     return character.tutorial_step as TutorialStep;
   }
 
-  // Idempotency #1: if the player already owns the sword (inventory
-  // or equipped — from a prior dev-reset cycle that preserved items),
-  // skip the drop entirely and fast-forward to 'complete'. The user
-  // explicitly asked for tutorial replay WITHOUT duplicating gear.
-  const { data: alreadyOwned } = await supabase
-    .from("character_items")
-    .select("id")
-    .eq("character_id", character.id)
-    .eq("item_id", TUTORIAL_SWORD_ITEM_ID)
-    .limit(1)
-    .maybeSingle();
-  if (alreadyOwned) {
-    const { error: skipErr } = await supabase
-      .from("characters")
-      .update({ tutorial_step: "complete" })
-      .eq("id", character.id)
-      .eq("tutorial_step", "walk_to_cedric");
-    if (skipErr) throw new Error(`fast-forward tutorial: ${skipErr.message}`);
-    return "complete";
-  }
-
-  // Idempotency #2: only drop the sword if not already on the floor
+  // Idempotency: only drop the sword if not already on the floor
   // (e.g. dialogue endpoint retried mid-flight). Same room + item +
   // owner is the unique key for the tutorial drop.
+  //
+  // We DON'T check whether the player already owns a sword here. The
+  // dev-reset-tutorial route wipes the tutorial sword from inventory
+  // + ground before unsetting the step, so by the time we reach this
+  // path the player legitimately has no starter sword and the drop is
+  // correct. In production (no dev-reset), this path runs exactly
+  // once per character — first Cedric dialogue ever.
   const { data: existing } = await supabase
     .from("room_ground_items")
     .select("id")
