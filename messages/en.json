@@ -126,6 +126,19 @@
       "two_handed": "Two-handed",
       "off_hand": "Off-hand"
     },
+    "handedness_label": "Grip",
+    "armor_slot_label": "Piece",
+    "durability_label": "Durability",
+    "quantity_label": "Quantity",
+    "equipped_hint": "Tap an equipped slot in the Equipo tab to unequip",
+    "armor_slot": {
+      "head": "Head",
+      "chest": "Chest",
+      "arms": "Arms",
+      "legs": "Legs",
+      "feet": "Feet",
+      "off_hand_shield": "Shield"
+    },
     "slot": {
       "main_hand": "Main hand",
       "off_hand": "Off hand",

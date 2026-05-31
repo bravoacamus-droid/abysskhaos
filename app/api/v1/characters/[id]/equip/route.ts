@@ -4,6 +4,7 @@ import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { buildRoomStateForCharacter, roomStateErrorResponse } from "@/lib/server/room-state";
 import { onItemEquipped } from "@/lib/server/tutorial";
+import { recomputeAndPersistCombatStats } from "@/lib/server/stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -182,6 +183,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .eq("id", charItem.id);
   if (upErr) {
     return NextResponse.json({ error: "DB_FAILED", detail: upErr.message }, { status: 500 });
+  }
+
+  // Recompute combat stats server-side. NEVER trust client to do this
+  // — character.atk and character.def must reflect the actual equipped
+  // set or the combat resolution can be exploited.
+  try {
+    await recomputeAndPersistCombatStats(supabase, character.id);
+  } catch (err) {
+    return NextResponse.json(
+      { error: "RECOMPUTE_FAILED", detail: (err as Error).message },
+      { status: 500 },
+    );
   }
 
   // Tutorial advance.

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { buildRoomStateForCharacter, roomStateErrorResponse } from "@/lib/server/room-state";
+import { recomputeAndPersistCombatStats } from "@/lib/server/stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +81,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .update({ inventory_slot: firstFree, equipped_slot: null })
     .eq("id", charItem.id);
   if (upErr) return NextResponse.json({ error: "DB_FAILED", detail: upErr.message }, { status: 500 });
+
+  // Server-authoritative recompute after the equipped set changes.
+  try {
+    await recomputeAndPersistCombatStats(supabase, character.id);
+  } catch (err) {
+    return NextResponse.json(
+      { error: "RECOMPUTE_FAILED", detail: (err as Error).message },
+      { status: 500 },
+    );
+  }
 
   const locale = typeof body.locale === "string" ? body.locale : "en";
   const roomState = await buildRoomStateForCharacter(supabase, {

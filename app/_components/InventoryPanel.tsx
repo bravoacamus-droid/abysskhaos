@@ -99,14 +99,27 @@ export function InventoryPanel({
     return map;
   }, [state.inventory]);
 
+  /** Mochila tab shows BOTH inventory + equipped items in one list,
+   *  filtered by category. Equipped items get an "E" badge so the
+   *  player can see what they already have on without switching tabs.
+   *  Sort: equipped first, then by inventory_slot ascending. */
   const filteredInventory = useMemo(() => {
-    const items = state.inventory.filter((item) => {
+    const all = [...state.inventory, ...state.equipped];
+    const items = all.filter((item) => {
       if (category === "all") return true;
       const cat = state.item_catalog[item.item_id];
       return cat?.item_type === category;
     });
-    return items;
-  }, [state.inventory, state.item_catalog, category]);
+    return items.sort((a, b) => {
+      const aE = typeof a.slot === "string" ? 0 : 1;
+      const bE = typeof b.slot === "string" ? 0 : 1;
+      if (aE !== bE) return aE - bE;
+      if (typeof a.slot === "number" && typeof b.slot === "number") {
+        return a.slot - b.slot;
+      }
+      return 0;
+    });
+  }, [state.inventory, state.equipped, state.item_catalog, category]);
 
   const selectedItem =
     selectedInvId != null ? state.inventory.find((i) => i.id === selectedInvId) ?? null : null;
@@ -217,6 +230,11 @@ export function InventoryPanel({
               pendingItemId={pendingItemId ?? null}
               onUnequip={onUnequip}
               onPickSlot={(slot) => setSlotPickerOpen(slot)}
+              // Tutorial step 'equip_sword' pulses main_hand so the
+              // player knows where the sword needs to go.
+              highlightSlot={
+                state.player.tutorial_step === "equip_sword" ? "main_hand" : null
+              }
             />
           ) : null}
           {tab === "inventario" ? (
@@ -409,6 +427,7 @@ function EquipoTab({
   pendingItemId,
   onUnequip,
   onPickSlot,
+  highlightSlot,
 }: {
   state: RoomState;
   locale: Locale;
@@ -416,6 +435,9 @@ function EquipoTab({
   pendingItemId: string | null;
   onUnequip: (id: string) => void;
   onPickSlot: (slot: EquippedSlot) => void;
+  /** Tutorial hint: this slot pulses so the player knows where to drop
+   *  the item. Set during equip_sword tutorial step (= 'main_hand'). */
+  highlightSlot?: EquippedSlot | null;
 }) {
   return (
     <div className="space-y-1.5">
@@ -423,6 +445,7 @@ function EquipoTab({
         const item = equippedBySlot.get(slot);
         const cat = item ? state.item_catalog[item.item_id] : null;
         const isPending = !!item && pendingItemId === item.id;
+        const isHighlight = highlightSlot === slot;
         return (
           <button
             key={slot}
@@ -436,49 +459,34 @@ function EquipoTab({
               }
             }}
             className={
-              "flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left transition disabled:opacity-50 " +
-              (item
-                ? "border-abyss-soul/70 bg-abyss-deep/80 hover:bg-abyss-coal/30"
-                : "border-dashed border-abyss-coal/70 bg-abyss-void/60 hover:bg-abyss-coal/20")
+              "flex w-full items-center gap-3 rounded border px-3 py-2 text-left transition disabled:opacity-50 " +
+              (isHighlight
+                ? "border-abyss-soul bg-abyss-soul/15 ring-2 ring-abyss-soul/60 animate-pulse"
+                : item
+                  ? "border-abyss-soul/70 bg-abyss-deep/80 hover:bg-abyss-coal/30"
+                  : "border-dashed border-abyss-coal/70 bg-abyss-void/60 hover:bg-abyss-coal/20")
             }
           >
-            {/* Slot icon (frame) */}
-            <div
-              className="relative h-10 w-10 shrink-0"
-              style={{
-                backgroundImage: `url(${SLOT_FRAME_URL})`,
-                backgroundSize: "100% 100%",
-                imageRendering: "pixelated",
-              }}
-            >
-              {cat?.icon_path ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={cat.icon_path}
-                  alt={cat.name_localized}
-                  className="absolute inset-1 h-[calc(100%-8px)] w-[calc(100%-8px)] object-contain"
-                  style={{ imageRendering: "pixelated" }}
-                />
-              ) : null}
-            </div>
             <div className="min-w-0 flex-1">
               <p className="text-[9px] uppercase tracking-widest text-abyss-fog">
                 {t(locale, `inventory.slot.${slot}`)}
               </p>
-              <p className="truncate text-xs font-semibold text-white">
-                {cat?.name_localized ?? <span className="italic text-abyss-mist">{t(locale, "inventory.empty_slot")}</span>}
+              <p className="truncate text-sm font-semibold text-white">
+                {cat?.name_localized ?? (
+                  <span className="italic text-abyss-mist">{t(locale, "inventory.empty_slot")}</span>
+                )}
               </p>
               {cat?.weapon ? (
-                <p className="flex items-center gap-1 text-[9px] text-abyss-soul">
+                <p className="flex items-center gap-1 text-[10px] text-abyss-soul">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={ATK_ICON_URL} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                  <img src={ATK_ICON_URL} alt="" width={11} height={11} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
                   +{cat.weapon.base_atk}
                 </p>
               ) : null}
               {cat?.armor ? (
-                <p className="flex items-center gap-1 text-[9px] text-abyss-soul">
+                <p className="flex items-center gap-1 text-[10px] text-abyss-soul">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={DEF_ICON_URL} alt="" width={10} height={10} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
+                  <img src={DEF_ICON_URL} alt="" width={11} height={11} className="h-2.5 w-2.5" style={{ imageRendering: "pixelated" }} />
                   +{cat.armor.base_def}
                 </p>
               ) : null}
@@ -569,20 +577,18 @@ function InventarioTab({
         ) : (
           filteredInventory.map((item) => {
             const cat = state.item_catalog[item.item_id];
-            const isSelected = selectedInvId === item.id;
             const isPending = pendingItemId === item.id;
+            const isEquipped = typeof item.slot === "string";
             return (
               <button
                 key={item.id}
                 type="button"
                 disabled={isPending}
-                onClick={() =>
-                  setSelectedInvId(isSelected ? null : item.id)
-                }
+                onClick={() => setSelectedInvId(item.id)}
                 className={
                   "flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left transition disabled:opacity-50 " +
-                  (isSelected
-                    ? "border-abyss-soul bg-abyss-soul/20"
+                  (isEquipped
+                    ? "border-abyss-soul/80 bg-abyss-soul/10 hover:bg-abyss-soul/20"
                     : "border-abyss-coal/70 bg-abyss-deep/80 hover:bg-abyss-coal/30")
                 }
               >
@@ -603,6 +609,11 @@ function InventarioTab({
                       style={{ imageRendering: "pixelated" }}
                     />
                   ) : null}
+                  {isEquipped ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-abyss-soul text-[9px] font-bold text-abyss-void shadow">
+                      E
+                    </span>
+                  ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-white">
@@ -620,7 +631,9 @@ function InventarioTab({
                   </p>
                 </div>
                 {item.quantity > 1 ? (
-                  <span className="text-xs font-bold text-abyss-soul">×{item.quantity}</span>
+                  <span className="rounded bg-abyss-void/80 px-1.5 py-0.5 text-xs font-bold text-abyss-soul">
+                    ×{item.quantity}
+                  </span>
                 ) : null}
               </button>
             );
@@ -628,48 +641,22 @@ function InventarioTab({
         )}
       </div>
 
-      {/* Selection action drawer */}
+      {/* Full item detail modal — replaces the old bottom drawer.
+          Tapping an item opens the card with all its stats + actions. */}
       {selectedItem && selectedCat ? (
-        <div className="mt-2 rounded border border-abyss-soul/70 bg-abyss-deep p-2 shadow-lg">
-          <p className="text-xs font-bold text-white">{selectedCat.name_localized}</p>
-          {selectedCat.weapon ? (
-            <p className="flex items-center gap-1.5 text-[10px] text-abyss-soul">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={ATK_ICON_URL} alt="" width={12} height={12} className="h-3 w-3" style={{ imageRendering: "pixelated" }} />
-              +{selectedCat.weapon.base_atk} ·{" "}
-              {selectedCat.weapon.handedness === "two_handed"
-                ? t(locale, "inventory.handedness.two_handed")
-                : selectedCat.weapon.handedness === "off_hand"
-                  ? t(locale, "inventory.handedness.off_hand")
-                  : t(locale, "inventory.handedness.one_handed")}
-            </p>
-          ) : null}
-          {selectedCat.armor ? (
-            <p className="flex items-center gap-1.5 text-[10px] text-abyss-soul">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={DEF_ICON_URL} alt="" width={12} height={12} className="h-3 w-3" style={{ imageRendering: "pixelated" }} />
-              +{selectedCat.armor.base_def}
-            </p>
-          ) : null}
-          {(selectedCat.item_type === "weapon" ||
-            selectedCat.item_type === "armor" ||
-            selectedCat.item_type === "accessory") &&
-          defaultSlotForItem(selectedItem) !== null ? (
-            <button
-              type="button"
-              onClick={() => {
-                const slot = defaultSlotForItem(selectedItem);
-                if (slot) {
-                  onEquip(selectedItem.id, slot);
-                  setSelectedInvId(null);
-                }
-              }}
-              className="mt-2 w-full rounded bg-abyss-soul px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-abyss-void hover:bg-abyss-soul/90"
-            >
-              {t(locale, "inventory.equip_action")}
-            </button>
-          ) : null}
-        </div>
+        <ItemDetailModal
+          item={selectedItem}
+          cat={selectedCat}
+          locale={locale}
+          isEquipped={typeof selectedItem.slot === "string"}
+          targetSlot={defaultSlotForItem(selectedItem)}
+          pending={pendingItemId === selectedItem.id}
+          onClose={() => setSelectedInvId(null)}
+          onEquip={(slot) => {
+            onEquip(selectedItem.id, slot);
+            setSelectedInvId(null);
+          }}
+        />
       ) : null}
     </div>
   );
@@ -872,6 +859,144 @@ function TabBtn({
     >
       {children}
     </button>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * ITEM DETAIL MODAL — full card with all stats + actions
+ *   Opens when tapping an item in the InventarioTab list.
+ * ────────────────────────────────────────────────────────────────── */
+function ItemDetailModal({
+  item,
+  cat,
+  locale,
+  isEquipped,
+  targetSlot,
+  pending,
+  onClose,
+  onEquip,
+}: {
+  item: CharacterItem;
+  cat: ItemCatalogEntry;
+  locale: Locale;
+  isEquipped: boolean;
+  targetSlot: EquippedSlot | null;
+  pending: boolean;
+  onClose: () => void;
+  onEquip: (slot: EquippedSlot) => void;
+}) {
+  const canEquip =
+    !isEquipped &&
+    targetSlot !== null &&
+    (cat.item_type === "weapon" ||
+      cat.item_type === "armor" ||
+      cat.item_type === "accessory");
+  return (
+    <div
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border-2 border-abyss-soul/80 bg-abyss-deep p-4 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="mb-3 flex items-start gap-3">
+          <div
+            className="relative h-14 w-14 shrink-0"
+            style={{
+              backgroundImage: `url(${SLOT_FRAME_URL})`,
+              backgroundSize: "100% 100%",
+              imageRendering: "pixelated",
+            }}
+          >
+            {cat.icon_path ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={cat.icon_path}
+                alt=""
+                className="absolute inset-1.5 h-[calc(100%-12px)] w-[calc(100%-12px)] object-contain"
+                style={{ imageRendering: "pixelated" }}
+              />
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-white">{cat.name_localized}</p>
+            <p className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-abyss-fog">
+              {(() => {
+                const ico = categoryIconUrl(cat.item_type);
+                return ico ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={ico} alt="" width={12} height={12} className="h-3 w-3" style={{ imageRendering: "pixelated" }} />
+                ) : null;
+              })()}
+              {t(locale, `inventory.category.${cat.item_type}`)}
+            </p>
+            {isEquipped ? (
+              <span className="mt-1 inline-block rounded bg-abyss-soul/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-abyss-soul">
+                {t(locale, "inventory.tab_equipped")}
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-lg text-abyss-fog hover:text-white"
+            aria-label={t(locale, "inventory.close")}
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="space-y-1.5 rounded border border-abyss-coal/60 bg-abyss-void/60 p-3">
+          {cat.weapon ? (
+            <>
+              <KV icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={`+${cat.weapon.base_atk}`} />
+              <KV
+                label={t(locale, "inventory.handedness_label")}
+                value={
+                  cat.weapon.handedness === "two_handed"
+                    ? t(locale, "inventory.handedness.two_handed")
+                    : cat.weapon.handedness === "off_hand"
+                      ? t(locale, "inventory.handedness.off_hand")
+                      : t(locale, "inventory.handedness.one_handed")
+                }
+              />
+            </>
+          ) : null}
+          {cat.armor ? (
+            <>
+              <KV icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={`+${cat.armor.base_def}`} />
+              <KV
+                label={t(locale, "inventory.armor_slot_label")}
+                value={t(locale, `inventory.armor_slot.${cat.armor.slot}`)}
+              />
+            </>
+          ) : null}
+          {item.durability !== null ? (
+            <KV label={t(locale, "inventory.durability_label")} value={item.durability} />
+          ) : null}
+          {item.quantity > 1 ? (
+            <KV label={t(locale, "inventory.quantity_label")} value={item.quantity} />
+          ) : null}
+        </div>
+
+        {canEquip && targetSlot ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onEquip(targetSlot)}
+            className="mt-3 w-full rounded bg-abyss-soul px-3 py-2 text-xs font-bold uppercase tracking-widest text-abyss-void hover:bg-abyss-soul/90 disabled:opacity-50"
+          >
+            {t(locale, "inventory.equip_action")}
+          </button>
+        ) : null}
+        {isEquipped ? (
+          <p className="mt-3 text-center text-[10px] uppercase tracking-widest text-abyss-fog">
+            {t(locale, "inventory.equipped_hint")}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

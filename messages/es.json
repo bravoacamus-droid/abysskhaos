@@ -126,6 +126,19 @@
       "two_handed": "Dos manos",
       "off_hand": "Mano secundaria"
     },
+    "handedness_label": "Empuñadura",
+    "armor_slot_label": "Pieza",
+    "durability_label": "Durabilidad",
+    "quantity_label": "Cantidad",
+    "equipped_hint": "Tocá un slot equipado en la pestaña Equipo para desequiparlo",
+    "armor_slot": {
+      "head": "Cabeza",
+      "chest": "Pecho",
+      "arms": "Brazos",
+      "legs": "Piernas",
+      "feet": "Pies",
+      "off_hand_shield": "Escudo"
+    },
     "slot": {
       "main_hand": "Mano principal",
       "off_hand": "Mano secundaria",
