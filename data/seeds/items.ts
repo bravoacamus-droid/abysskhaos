@@ -15,11 +15,18 @@ const itemsMaster = [
 ] as const;
 
 const weapons = [
-  { item_id: "starter_iron_sword", weapon_class: "sword", base_atk: 12, base_durability: 100, sockets_max: 0, handedness: "one_handed", primary_element_id: null, soul_capacity_size: "s" },
+  // bonus_str=+1, bonus_hp=+10 so the player sees STR and HP move
+  // when equipping the starter sword, not just ATK. Matches the user
+  // request to make the equip difference visible across the sheet.
+  { item_id: "starter_iron_sword", weapon_class: "sword", base_atk: 12, base_durability: 100, sockets_max: 0, handedness: "one_handed", primary_element_id: null, soul_capacity_size: "s",
+    bonus_str: 1, bonus_agi: 0, bonus_int: 0, bonus_spi: 0, bonus_hp: 10, bonus_mp: 0 },
 ] as const;
 
 const armor = [
-  { item_id: "starter_leather_chest", armor_class: "ligera", slot: "chest", base_def: 8, base_durability: 100, sockets_max: 0 },
+  // Small +2 HP bump on the starter chest mirrors the sword's HP gift
+  // and lets test players see both weapon + armor contribute to vitals.
+  { item_id: "starter_leather_chest", armor_class: "ligera", slot: "chest", base_def: 8, base_durability: 100, sockets_max: 0,
+    bonus_str: 0, bonus_agi: 0, bonus_int: 0, bonus_spi: 0, bonus_hp: 2, bonus_mp: 0 },
 ] as const;
 
 const consumables = [

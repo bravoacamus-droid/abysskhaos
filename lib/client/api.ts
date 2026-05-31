@@ -246,14 +246,23 @@ export type GroundItem = {
   metadata: Record<string, unknown>;
 };
 
+export type ItemBonuses = {
+  bonus_str: number;
+  bonus_agi: number;
+  bonus_int: number;
+  bonus_spi: number;
+  bonus_hp: number;
+  bonus_mp: number;
+};
+
 export type ItemCatalogEntry = {
   id: string;
   name: string;
   name_localized: string;
   item_type: "weapon" | "armor" | "accessory" | "consumable" | "gem" | "quest" | "misc";
   icon_path: string | null;
-  weapon: { handedness: string; base_atk: number } | null;
-  armor: { slot: string; base_def: number } | null;
+  weapon: ({ handedness: string; base_atk: number } & ItemBonuses) | null;
+  armor: ({ slot: string; base_def: number } & ItemBonuses) | null;
   accessory: { slot: string } | null;
 };
 
@@ -295,10 +304,31 @@ export type RoomState = {
     mp_max: number;
     atk: number;
     def: number;
+    /** Base primary attrs (from the characters row — level-up writes
+     *  to these). For display, prefer `effective_attr_*` which folds
+     *  in equipped gear bonuses. */
     attr_strength: number;
     attr_agility: number;
     attr_intelligence: number;
     attr_spirit: number;
+    /** Base + Σ(equipped bonus_<attr>). Used by Atributos tab as the
+     *  "current" value and by the sub-attribute breakdown to derive
+     *  numbers like crit chance / evasion. */
+    effective_attr_strength: number;
+    effective_attr_agility: number;
+    effective_attr_intelligence: number;
+    effective_attr_spirit: number;
+    /** Effective HP/MP max = character base + Σ(equipped bonus_hp/mp). */
+    hp_max_effective: number;
+    mp_max_effective: number;
+    /** Per-stat gear contribution. Lets the UI render "(+1)" next to
+     *  the primary attr value or the small bonus annotations on stat
+     *  sheets without re-summing item_catalog data. */
+    equipped_bonuses: {
+      atk: number; def: number;
+      bonus_str: number; bonus_agi: number; bonus_int: number; bonus_spi: number;
+      bonus_hp: number; bonus_mp: number;
+    };
     title_id: string | null;
     path_id: string | null;
     khryn: number;

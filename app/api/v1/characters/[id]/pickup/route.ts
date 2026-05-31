@@ -73,41 +73,61 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "NOT_YOUR_ITEM" }, { status: 403 });
   }
 
-  // Find the first empty inventory slot. SELECT all occupied slots in
-  // one query, then pick the lowest free index — fast enough at 40 slots
-  // that we don't bother with a smarter algorithm.
-  const { data: occupiedRows, error: invErr } = await supabase
+  // Stack-or-place: if the player already has an INVENTORY row with
+  // the same item_id, increment its quantity. Else find the first
+  // empty slot and INSERT. Stacking matches the user's request to
+  // see "×N" badges on duplicate items (most notably tutorial-replay
+  // swords). Equipped rows never stack — only inventory.
+  const { data: existingStack, error: stackErr } = await supabase
     .from("character_items")
-    .select("inventory_slot")
+    .select("id, quantity")
     .eq("character_id", character.id)
-    .not("inventory_slot", "is", null);
-  if (invErr) return NextResponse.json({ error: "DB_FAILED", detail: invErr.message }, { status: 500 });
-  const occupied = new Set((occupiedRows ?? []).map((r) => r.inventory_slot as number));
-  let firstFree = -1;
-  for (let i = 0; i < TOTAL_INVENTORY_SLOTS; i++) {
-    if (!occupied.has(i)) {
-      firstFree = i;
-      break;
-    }
-  }
-  if (firstFree === -1) {
-    return NextResponse.json({ error: "INVENTORY_FULL" }, { status: 409 });
-  }
+    .eq("item_id", ground.item_id)
+    .not("inventory_slot", "is", null)
+    .limit(1)
+    .maybeSingle();
+  if (stackErr) return NextResponse.json({ error: "DB_FAILED", detail: stackErr.message }, { status: 500 });
 
-  // INSERT character_items + DELETE room_ground_items. Not in a single
-  // transaction yet (Phase 4 will add a SQL function), but order matters:
-  // if the DELETE fails after the INSERT, the player has a duplicate
-  // item — annoying but recoverable via support. The opposite order
-  // (delete first) could lose the item if the INSERT fails.
-  const { error: addErr } = await supabase.from("character_items").insert({
-    character_id: character.id,
-    item_id: ground.item_id,
-    inventory_slot: firstFree,
-    quantity: ground.quantity,
-    metadata: ground.metadata,
-  });
-  if (addErr) {
-    return NextResponse.json({ error: "DB_FAILED", detail: addErr.message }, { status: 500 });
+  if (existingStack) {
+    const newQty = (existingStack.quantity as number) + (ground.quantity as number);
+    const { error: bumpErr } = await supabase
+      .from("character_items")
+      .update({ quantity: newQty })
+      .eq("id", existingStack.id);
+    if (bumpErr) {
+      return NextResponse.json({ error: "DB_FAILED", detail: bumpErr.message }, { status: 500 });
+    }
+  } else {
+    // Find the first empty inventory slot. SELECT all occupied slots in
+    // one query, then pick the lowest free index — fast enough at 40 slots
+    // that we don't bother with a smarter algorithm.
+    const { data: occupiedRows, error: invErr } = await supabase
+      .from("character_items")
+      .select("inventory_slot")
+      .eq("character_id", character.id)
+      .not("inventory_slot", "is", null);
+    if (invErr) return NextResponse.json({ error: "DB_FAILED", detail: invErr.message }, { status: 500 });
+    const occupied = new Set((occupiedRows ?? []).map((r) => r.inventory_slot as number));
+    let firstFree = -1;
+    for (let i = 0; i < TOTAL_INVENTORY_SLOTS; i++) {
+      if (!occupied.has(i)) {
+        firstFree = i;
+        break;
+      }
+    }
+    if (firstFree === -1) {
+      return NextResponse.json({ error: "INVENTORY_FULL" }, { status: 409 });
+    }
+    const { error: addErr } = await supabase.from("character_items").insert({
+      character_id: character.id,
+      item_id: ground.item_id,
+      inventory_slot: firstFree,
+      quantity: ground.quantity,
+      metadata: ground.metadata,
+    });
+    if (addErr) {
+      return NextResponse.json({ error: "DB_FAILED", detail: addErr.message }, { status: 500 });
+    }
   }
   const { error: rmErr } = await supabase
     .from("room_ground_items")

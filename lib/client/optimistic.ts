@@ -32,12 +32,73 @@ function firstFreeInventorySlot(inventory: CharacterItem[]): number {
   return -1;
 }
 
-/** Look up the weapon ATK + armor DEF bonus an item gives. */
-function bonusesFor(state: RoomState, itemId: string): { atk: number; def: number } {
+type FullBonuses = {
+  atk: number; def: number;
+  bonus_str: number; bonus_agi: number; bonus_int: number; bonus_spi: number;
+  bonus_hp: number; bonus_mp: number;
+};
+
+const NO_BONUSES: FullBonuses = {
+  atk: 0, def: 0,
+  bonus_str: 0, bonus_agi: 0, bonus_int: 0, bonus_spi: 0,
+  bonus_hp: 0, bonus_mp: 0,
+};
+
+/** Look up the full bonus set an item contributes when equipped:
+ *  weapon base_atk (or armor base_def) plus the attribute/vital
+ *  bonuses (bonus_str / bonus_hp / etc.) from the catalog entry. */
+function bonusesFor(state: RoomState, itemId: string): FullBonuses {
   const cat = state.item_catalog[itemId];
+  if (!cat) return { ...NO_BONUSES };
+  const out: FullBonuses = { ...NO_BONUSES };
+  if (cat.weapon) {
+    out.atk        = cat.weapon.base_atk;
+    out.bonus_str  = cat.weapon.bonus_str;
+    out.bonus_agi  = cat.weapon.bonus_agi;
+    out.bonus_int  = cat.weapon.bonus_int;
+    out.bonus_spi  = cat.weapon.bonus_spi;
+    out.bonus_hp   = cat.weapon.bonus_hp;
+    out.bonus_mp   = cat.weapon.bonus_mp;
+  }
+  if (cat.armor) {
+    out.def        = cat.armor.base_def;
+    out.bonus_str += cat.armor.bonus_str;
+    out.bonus_agi += cat.armor.bonus_agi;
+    out.bonus_int += cat.armor.bonus_int;
+    out.bonus_spi += cat.armor.bonus_spi;
+    out.bonus_hp  += cat.armor.bonus_hp;
+    out.bonus_mp  += cat.armor.bonus_mp;
+  }
+  return out;
+}
+
+/** Apply (sign × delta) to every numeric field of a player snapshot. */
+function applyBonusDelta(
+  player: RoomState["player"],
+  delta: FullBonuses,
+  sign: 1 | -1,
+): RoomState["player"] {
+  const s = sign;
   return {
-    atk: cat?.weapon?.base_atk ?? 0,
-    def: cat?.armor?.base_def ?? 0,
+    ...player,
+    atk: player.atk + s * delta.atk,
+    def: player.def + s * delta.def,
+    effective_attr_strength:     player.effective_attr_strength     + s * delta.bonus_str,
+    effective_attr_agility:      player.effective_attr_agility      + s * delta.bonus_agi,
+    effective_attr_intelligence: player.effective_attr_intelligence + s * delta.bonus_int,
+    effective_attr_spirit:       player.effective_attr_spirit       + s * delta.bonus_spi,
+    hp_max_effective: player.hp_max_effective + s * delta.bonus_hp,
+    mp_max_effective: player.mp_max_effective + s * delta.bonus_mp,
+    equipped_bonuses: {
+      atk: player.equipped_bonuses.atk + s * delta.atk,
+      def: player.equipped_bonuses.def + s * delta.def,
+      bonus_str: player.equipped_bonuses.bonus_str + s * delta.bonus_str,
+      bonus_agi: player.equipped_bonuses.bonus_agi + s * delta.bonus_agi,
+      bonus_int: player.equipped_bonuses.bonus_int + s * delta.bonus_int,
+      bonus_spi: player.equipped_bonuses.bonus_spi + s * delta.bonus_spi,
+      bonus_hp: player.equipped_bonuses.bonus_hp + s * delta.bonus_hp,
+      bonus_mp: player.equipped_bonuses.bonus_mp + s * delta.bonus_mp,
+    },
   };
 }
 
@@ -75,7 +136,7 @@ export function optimisticEquip(
   }
 
   const movingBonuses = bonusesFor(state, moving.item_id);
-  const displacedBonuses = displaced ? bonusesFor(state, displaced.item_id) : { atk: 0, def: 0 };
+  const displacedBonuses = displaced ? bonusesFor(state, displaced.item_id) : NO_BONUSES;
 
   const newInventory: CharacterItem[] = state.inventory
     .filter((i) => i.id !== characterItemId)
@@ -89,15 +150,25 @@ export function optimisticEquip(
     .filter((i) => i.id !== characterItemId && i.id !== displaced?.id)
     .concat([{ ...moving, slot }]);
 
+  // Subtract displaced bonuses (if any), then add moving bonuses.
+  // Mirrors the server's recompute: gear-only deltas, never touches
+  // base attrs on the character row.
+  let nextPlayer = state.player;
+  if (displaced) {
+    nextPlayer = applyBonusDelta(nextPlayer, displacedBonuses, -1);
+  }
+  // If the moving item was already equipped (slot swap, e.g. main_hand
+  // → off_hand) its bonuses are already in player.atk/etc. — don't
+  // double-add. Only add when promoting from inventory.
+  if (fromInv) {
+    nextPlayer = applyBonusDelta(nextPlayer, movingBonuses, +1);
+  }
+
   return {
     ...state,
     inventory: newInventory,
     equipped: newEquipped,
-    player: {
-      ...state.player,
-      atk: state.player.atk + movingBonuses.atk - displacedBonuses.atk,
-      def: state.player.def + movingBonuses.def - displacedBonuses.def,
-    },
+    player: nextPlayer,
   };
 }
 
@@ -122,10 +193,6 @@ export function optimisticUnequip(
     ...state,
     equipped: state.equipped.filter((i) => i.id !== characterItemId),
     inventory: [...state.inventory, { ...eq, slot: free }],
-    player: {
-      ...state.player,
-      atk: state.player.atk - bonuses.atk,
-      def: state.player.def - bonuses.def,
-    },
+    player: applyBonusDelta(state.player, bonuses, -1),
   };
 }

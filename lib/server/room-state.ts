@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { buildAttributeBreakdown } from "./attributes";
+import { computeEquippedBonuses } from "./stats";
 
 export type RoomStateBuildError =
   | { kind: "NOT_FOUND" }
@@ -304,16 +305,39 @@ export async function buildRoomStateForCharacter(
   const allItemIds = new Set<string>();
   for (const r of itemRows) allItemIds.add(r.item_id);
   for (const g of groundRows) allItemIds.add(g.item_id as string);
+  // Attribute / vital bonuses are exposed in the catalog so the
+  // ItemDetailModal can render "+1 STR · +10 HP" alongside ATK / DEF,
+  // and so the client's optimistic equip helper can apply the same
+  // bonus deltas to the predicted stat sheet.
+  type ItemBonuses = {
+    bonus_str: number;
+    bonus_agi: number;
+    bonus_int: number;
+    bonus_spi: number;
+    bonus_hp: number;
+    bonus_mp: number;
+  };
   type ItemCatalogEntry = {
     id: string;
     name: string;
     name_localized: string;
     item_type: string;
     icon_path: string | null;
-    weapon: { handedness: string; base_atk: number } | null;
-    armor: { slot: string; base_def: number } | null;
+    weapon: ({ handedness: string; base_atk: number } & ItemBonuses) | null;
+    armor: ({ slot: string; base_def: number } & ItemBonuses) | null;
     accessory: { slot: string } | null;
   };
+  const BONUS_COLS = "bonus_str, bonus_agi, bonus_int, bonus_spi, bonus_hp, bonus_mp";
+  function asBonuses(row: Record<string, unknown>): ItemBonuses {
+    return {
+      bonus_str: (row.bonus_str as number) ?? 0,
+      bonus_agi: (row.bonus_agi as number) ?? 0,
+      bonus_int: (row.bonus_int as number) ?? 0,
+      bonus_spi: (row.bonus_spi as number) ?? 0,
+      bonus_hp:  (row.bonus_hp  as number) ?? 0,
+      bonus_mp:  (row.bonus_mp  as number) ?? 0,
+    };
+  }
   const catalog: Record<string, ItemCatalogEntry> = {};
   if (allItemIds.size > 0) {
     const ids = Array.from(allItemIds);
@@ -322,8 +346,8 @@ export async function buildRoomStateForCharacter(
         .from("items_master")
         .select("id, name, item_type, icon_path")
         .in("id", ids),
-      supabase.from("weapons").select("item_id, handedness, base_atk").in("item_id", ids),
-      supabase.from("armor").select("item_id, slot, base_def").in("item_id", ids),
+      supabase.from("weapons").select(`item_id, handedness, base_atk, ${BONUS_COLS}`).in("item_id", ids),
+      supabase.from("armor").select(`item_id, slot, base_def, ${BONUS_COLS}`).in("item_id", ids),
       supabase.from("accessories").select("item_id, slot").in("item_id", ids),
       locale !== "en"
         ? supabase
@@ -354,10 +378,10 @@ export async function buildRoomStateForCharacter(
         item_type: m.item_type as string,
         icon_path: (m.icon_path as string | null) ?? null,
         weapon: w
-          ? { handedness: w.handedness as string, base_atk: w.base_atk as number }
+          ? { handedness: w.handedness as string, base_atk: w.base_atk as number, ...asBonuses(w as Record<string, unknown>) }
           : null,
         armor: a
-          ? { slot: a.slot as string, base_def: a.base_def as number }
+          ? { slot: a.slot as string, base_def: a.base_def as number, ...asBonuses(a as Record<string, unknown>) }
           : null,
         accessory: ac ? { slot: ac.slot as string } : null,
       };
@@ -385,19 +409,36 @@ export async function buildRoomStateForCharacter(
       metadata: r.metadata,
     }));
 
+  // Equipped bonuses (attr + vital gear bonuses) folded into effective
+  // values that the UI surfaces. We DON'T persist these to the
+  // characters row — base attrs / hp_max stay there and level-up logic
+  // can mutate them simply, with gear bonuses layered live per render.
+  const equipBonuses = await computeEquippedBonuses(supabase, character.id);
+
+  const baseStrength      = (character.attr_strength      as number | null) ?? 0;
+  const baseAgility       = (character.attr_agility       as number | null) ?? 0;
+  const baseIntelligence  = (character.attr_intelligence  as number | null) ?? 0;
+  const baseSpirit        = (character.attr_spirit        as number | null) ?? 0;
+  const baseHpMax         = (character.hp_max             as number | null) ?? 0;
+  const baseMpMax         = (character.mp_max             as number | null) ?? 0;
+
+  const effStrength     = baseStrength     + equipBonuses.bonus_str;
+  const effAgility      = baseAgility      + equipBonuses.bonus_agi;
+  const effIntelligence = baseIntelligence + equipBonuses.bonus_int;
+  const effSpirit       = baseSpirit       + equipBonuses.bonus_spi;
+  const effHpMax        = baseHpMax        + equipBonuses.bonus_hp;
+  const effMpMax        = baseMpMax        + equipBonuses.bonus_mp;
+
   // Attribute breakdown: 4 primaries with their 5 sub-attributes each,
-  // names localized, derived values computed from the character row.
-  // Loaded in parallel with the rest of the room data above would be
-  // ideal, but it depends on character.attr_* so we run it here. Cost
-  // is ~2 small lookups (attributes 4 rows, sub_attributes 20 rows)
-  // + translations — fast and read-only.
+  // names localized, derived values computed from EFFECTIVE primary
+  // attrs (so the sub-attr numbers reflect equipped gear too).
   const attributesBreakdown = await buildAttributeBreakdown(
     supabase,
     {
-      attr_strength: (character.attr_strength as number | null) ?? 0,
-      attr_agility: (character.attr_agility as number | null) ?? 0,
-      attr_intelligence: (character.attr_intelligence as number | null) ?? 0,
-      attr_spirit: (character.attr_spirit as number | null) ?? 0,
+      attr_strength: effStrength,
+      attr_agility: effAgility,
+      attr_intelligence: effIntelligence,
+      attr_spirit: effSpirit,
     },
     locale,
   );
@@ -447,10 +488,20 @@ export async function buildRoomStateForCharacter(
         mp_max: (character.mp_max as number | null) ?? 0,
         atk: (character.atk as number | null) ?? 0,
         def: (character.def as number | null) ?? 0,
-        attr_strength: (character.attr_strength as number | null) ?? 0,
-        attr_agility: (character.attr_agility as number | null) ?? 0,
-        attr_intelligence: (character.attr_intelligence as number | null) ?? 0,
-        attr_spirit: (character.attr_spirit as number | null) ?? 0,
+        // Base values from the character row (level-up writes here).
+        attr_strength: baseStrength,
+        attr_agility: baseAgility,
+        attr_intelligence: baseIntelligence,
+        attr_spirit: baseSpirit,
+        // Effective values = base + Σ(equipped bonuses). UI shows
+        // these as "13 (+1)" so the player can see what gear adds.
+        effective_attr_strength: effStrength,
+        effective_attr_agility: effAgility,
+        effective_attr_intelligence: effIntelligence,
+        effective_attr_spirit: effSpirit,
+        hp_max_effective: effHpMax,
+        mp_max_effective: effMpMax,
+        equipped_bonuses: equipBonuses,
         title_id: (character.title_id as string | null) ?? null,
         path_id: (character.path_id as string | null) ?? null,
         khryn: (character.khryn as number | null) ?? 0,

@@ -294,8 +294,15 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
   // class portrait shows the warrior holding a sword by default, which
   // misrepresents what's actually equipped right now.
   const spriteUrl = p.sprite_atlas?.south ?? null;
-  const hpPct = p.hp_max > 0 ? (p.hp_current / p.hp_max) * 100 : 0;
-  const mpPct = p.mp_max > 0 ? (p.mp_current / p.mp_max) * 100 : 0;
+  // Use the effective max (base + equipped bonus_hp/mp) for both the
+  // bar denominator and the percentage. Equipping a +10 HP weapon now
+  // bumps the bar's max instantly; hp_current isn't auto-bumped, so
+  // the bar might briefly look "less full" — that's intentional, the
+  // player can rest / consume to refill.
+  const hpMax = p.hp_max_effective;
+  const mpMax = p.mp_max_effective;
+  const hpPct = hpMax > 0 ? (p.hp_current / hpMax) * 100 : 0;
+  const mpPct = mpMax > 0 ? (p.mp_current / mpMax) * 100 : 0;
   return (
     <div className="space-y-2">
       {/* Sprite preview box */}
@@ -326,7 +333,7 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
           label="HP"
           color="bg-rose-500"
           value={p.hp_current}
-          max={p.hp_max}
+          max={hpMax}
           pct={hpPct}
         />
         <BarLine
@@ -334,18 +341,18 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
           label="MP"
           color="bg-sky-400"
           value={p.mp_current}
-          max={p.mp_max}
+          max={mpMax}
           pct={mpPct}
         />
       </div>
-      {/* Primary attrs summary */}
+      {/* Primary attrs summary — effective (base + equipped gear) */}
       <div className="grid grid-cols-2 gap-x-2 gap-y-1 rounded border border-abyss-coal/60 bg-abyss-void/50 px-2 py-1.5 text-[10px]">
         <StatLine icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={p.atk} />
         <StatLine icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={p.def} />
-        <StatLine icon={STR_ICON_URL} label="STR" value={p.attr_strength} />
-        <StatLine icon={AGI_ICON_URL} label="AGI" value={p.attr_agility} />
-        <StatLine icon={INT_ICON_URL} label="INT" value={p.attr_intelligence} />
-        <StatLine icon={SPI_ICON_URL} label="SPI" value={p.attr_spirit} />
+        <StatLine icon={STR_ICON_URL} label="STR" value={p.effective_attr_strength} />
+        <StatLine icon={AGI_ICON_URL} label="AGI" value={p.effective_attr_agility} />
+        <StatLine icon={INT_ICON_URL} label="INT" value={p.effective_attr_intelligence} />
+        <StatLine icon={SPI_ICON_URL} label="SPI" value={p.effective_attr_spirit} />
       </div>
     </div>
   );
@@ -685,16 +692,24 @@ const ATTR_ICON: Record<string, string> = {
 function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
   const p = state.player;
   const groups = state.attributes_breakdown ?? [];
+  // Per-attribute gear contribution lookup — lets each group card
+  // render "13 (+1)" so the player sees what's base and what's gear.
+  const bonusByAttr: Record<string, number> = {
+    strength: p.equipped_bonuses.bonus_str,
+    agility: p.equipped_bonuses.bonus_agi,
+    intelligence: p.equipped_bonuses.bonus_int,
+    spirit: p.equipped_bonuses.bonus_spi,
+  };
   return (
     <div className="space-y-3">
       <Section title={t(locale, "stats.section_combat")}>
-        <KV icon={HP_ICON_URL} label={t(locale, "stats.hp")} value={`${p.hp_current} / ${p.hp_max}`} />
-        <KV icon={MP_ICON_URL} label={t(locale, "stats.mp")} value={`${p.mp_current} / ${p.mp_max}`} />
-        <KV icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={p.atk} />
-        <KV icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={p.def} />
+        <KV icon={HP_ICON_URL} label={t(locale, "stats.hp")} value={`${p.hp_current} / ${p.hp_max_effective}`} bonus={p.equipped_bonuses.bonus_hp} />
+        <KV icon={MP_ICON_URL} label={t(locale, "stats.mp")} value={`${p.mp_current} / ${p.mp_max_effective}`} bonus={p.equipped_bonuses.bonus_mp} />
+        <KV icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={p.atk}        bonus={p.equipped_bonuses.atk} />
+        <KV icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={p.def}        bonus={p.equipped_bonuses.def} />
       </Section>
       {groups.map((g) => (
-        <AttributeGroupCard key={g.id} group={g} locale={locale} />
+        <AttributeGroupCard key={g.id} group={g} bonus={bonusByAttr[g.id] ?? 0} locale={locale} />
       ))}
       <Section title={t(locale, "stats.section_progress")}>
         <KV label={t(locale, "stats.level")} value={p.level} />
@@ -709,9 +724,14 @@ function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
 
 function AttributeGroupCard({
   group,
+  bonus,
   locale,
 }: {
   group: NonNullable<RoomState["attributes_breakdown"]>[number];
+  /** Gear contribution to this primary attr. group.value already
+   *  includes it; we show it as a tiny "(+N)" annotation so the
+   *  player can see how much came from equipped items. */
+  bonus: number;
   locale: Locale;
 }) {
   const icon = ATTR_ICON[group.id];
@@ -740,9 +760,16 @@ function AttributeGroupCard({
             </span>
           </div>
         </div>
-        <span className="rounded bg-abyss-soul/15 px-2 py-0.5 text-base font-semibold tabular-nums text-abyss-soul">
-          {group.value}
-        </span>
+        <div className="flex items-baseline gap-1.5">
+          {bonus > 0 ? (
+            <span className="text-[10px] font-semibold tabular-nums text-emerald-400">
+              +{bonus}
+            </span>
+          ) : null}
+          <span className="rounded bg-abyss-soul/15 px-2 py-0.5 text-base font-semibold tabular-nums text-abyss-soul">
+            {group.value}
+          </span>
+        </div>
       </div>
       {/* Body — 5 sub-attributes as rows */}
       <div className="divide-y divide-abyss-coal/40">
@@ -831,10 +858,14 @@ function KV({
   icon,
   label,
   value,
+  bonus,
 }: {
   icon?: string;
   label: string;
   value: number | string;
+  /** Optional gear contribution rendered as a green "+N" before the
+   *  primary value. Skipped when zero or undefined. */
+  bonus?: number;
 }) {
   return (
     <div className="flex items-center justify-between gap-2 text-xs">
@@ -852,7 +883,14 @@ function KV({
         ) : null}
         <span className="uppercase tracking-widest text-abyss-fog">{label}</span>
       </div>
-      <span className="tabular-nums font-semibold text-white">{value}</span>
+      <div className="flex items-baseline gap-1.5">
+        {bonus && bonus > 0 ? (
+          <span className="text-[10px] font-semibold tabular-nums text-emerald-400">
+            +{bonus}
+          </span>
+        ) : null}
+        <span className="tabular-nums font-semibold text-white">{value}</span>
+      </div>
     </div>
   );
 }
@@ -1085,6 +1123,7 @@ function ItemDetailModal({
                       : t(locale, "inventory.handedness.one_handed")
                 }
               />
+              <BonusRows bonuses={cat.weapon} locale={locale} />
             </>
           ) : null}
           {cat.armor ? (
@@ -1094,6 +1133,7 @@ function ItemDetailModal({
                 label={t(locale, "inventory.armor_slot_label")}
                 value={t(locale, `inventory.armor_slot.${cat.armor.slot}`)}
               />
+              <BonusRows bonuses={cat.armor} locale={locale} />
             </>
           ) : null}
           {item.durability !== null ? (
@@ -1121,6 +1161,33 @@ function ItemDetailModal({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** Renders the optional bonus_str / bonus_agi / bonus_int / bonus_spi /
+ *  bonus_hp / bonus_mp rows from a weapon or armor catalog entry. Skips
+ *  zero values so only meaningful bonuses appear. */
+function BonusRows({
+  bonuses,
+  locale,
+}: {
+  bonuses: { bonus_str: number; bonus_agi: number; bonus_int: number; bonus_spi: number; bonus_hp: number; bonus_mp: number };
+  locale: Locale;
+}) {
+  const rows: Array<{ icon: string; label: string; value: number }> = [];
+  if (bonuses.bonus_str > 0) rows.push({ icon: STR_ICON_URL, label: "STR",                       value: bonuses.bonus_str });
+  if (bonuses.bonus_agi > 0) rows.push({ icon: AGI_ICON_URL, label: "AGI",                       value: bonuses.bonus_agi });
+  if (bonuses.bonus_int > 0) rows.push({ icon: INT_ICON_URL, label: "INT",                       value: bonuses.bonus_int });
+  if (bonuses.bonus_spi > 0) rows.push({ icon: SPI_ICON_URL, label: "SPI",                       value: bonuses.bonus_spi });
+  if (bonuses.bonus_hp  > 0) rows.push({ icon: HP_ICON_URL,  label: t(locale, "stats.hp"),       value: bonuses.bonus_hp  });
+  if (bonuses.bonus_mp  > 0) rows.push({ icon: MP_ICON_URL,  label: t(locale, "stats.mp"),       value: bonuses.bonus_mp  });
+  if (rows.length === 0) return null;
+  return (
+    <>
+      {rows.map((r) => (
+        <KV key={r.label} icon={r.icon} label={r.label} value={`+${r.value}`} />
+      ))}
+    </>
   );
 }
 

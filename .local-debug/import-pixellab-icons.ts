@@ -1,15 +1,18 @@
 /**
- * Pull the 12 finalized icons the user tagged 'icon-final' in PixelLab,
- * download each rotation PNG, and re-upload through our registerAsset
- * pipeline so they live in our R2 (content-hashed, durable, takedown-
- * able) rather than depending on backblaze URLs we don't own.
+ * Pull the user's curated UI icons from PixelLab into our R2.
  *
- * After running: copy the printed const block into lib/client/icons.ts.
+ * Tag strategy (the user tagged the FINAL chosen variant of each icon
+ * with its Spanish name in PixelLab):
+ *   fuerza      → STR    agilidad → AGI    inteligencia → INT
+ *   espiritu    → SPI    salud    → HP     mana         → MP
+ *   defensa     → DEF    pocion   → cat_consumable
  *
- * Why we re-upload instead of using PixelLab URLs directly: the project
- * convention (data/ARCHITECTURE.md) is that every shipped asset is
- * registered in `asset_generations` with provenance for audit + has a
- * stable hash-named R2 URL we control.
+ * ATK, KHRYN, cat_armor, cat_accessory don't have a Spanish-name tag
+ * yet, so we fall back to the user's earlier `icon-final` batch for
+ * those. cat_weapon reuses ATK (no dedicated weapon-category icon).
+ *
+ * To swap or add an icon: re-tag the chosen PixelLab object with the
+ * Spanish name (or icon-final), update this map, rerun the script.
  */
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
@@ -19,26 +22,34 @@ import { registerAsset } from "../lib/assets/register";
 loadEnv({ path: ".env.local" });
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
-/** Map: which icon-constant ← which PixelLab object id. */
-const ICONS: Array<{ key: string; objectId: string; rotationUrl: string }> = [
-  { key: "hp",             objectId: "54de0916-a607-4f7c-b922-e2ecc95b4951", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/54de0916-a607-4f7c-b922-e2ecc95b4951/rotations/unknown.png" },
-  { key: "mp",             objectId: "182ead13-258c-4f54-b4eb-798225fe9348", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/182ead13-258c-4f54-b4eb-798225fe9348/rotations/unknown.png" },
-  { key: "atk",            objectId: "74f817c2-3da6-4f00-91dc-d69747b1e244", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/74f817c2-3da6-4f00-91dc-d69747b1e244/rotations/unknown.png" },
-  { key: "def",            objectId: "882fce2b-2770-42aa-b102-1c8d72eab09f", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/882fce2b-2770-42aa-b102-1c8d72eab09f/rotations/unknown.png" },
-  { key: "str",            objectId: "be18c133-1595-4be7-824a-c0d1c5b31b2b", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/be18c133-1595-4be7-824a-c0d1c5b31b2b/rotations/unknown.png" },
-  { key: "agi",            objectId: "67869bdf-57c8-4ba1-bb3d-babfe02d3fd3", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/67869bdf-57c8-4ba1-bb3d-babfe02d3fd3/rotations/unknown.png" },
-  { key: "int",            objectId: "5074be92-c85b-47ed-b697-c7f072512496", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/5074be92-c85b-47ed-b697-c7f072512496/rotations/unknown.png" },
-  { key: "spi",            objectId: "2b6d265a-da33-4bc8-a539-6ef94e2694bc", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/2b6d265a-da33-4bc8-a539-6ef94e2694bc/rotations/unknown.png" },
-  { key: "khryn",          objectId: "6ea6bdab-f20c-416f-bc2e-2c90b86d27f4", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/6ea6bdab-f20c-416f-bc2e-2c90b86d27f4/rotations/unknown.png" },
-  { key: "cat_armor",      objectId: "79c1daa6-55e4-4f39-a50f-6a9858fc442a", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/79c1daa6-55e4-4f39-a50f-6a9858fc442a/rotations/unknown.png" },
-  { key: "cat_accessory",  objectId: "7f1552ad-bba6-42f3-96f1-451401844d69", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/7f1552ad-bba6-42f3-96f1-451401844d69/rotations/unknown.png" },
-  { key: "cat_consumable", objectId: "36010553-1234-4ea1-92c3-ee2298b19e2b", rotationUrl: "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459/36010553-1234-4ea1-92c3-ee2298b19e2b/rotations/unknown.png" },
+const PROJECT_ID = "8d5dc016-f9f1-4d60-b597-face41b54459";
+
+function rotationUrl(objectId: string): string {
+  return `https://backblaze.pixellab.ai/file/pixellab-characters/objects/${PROJECT_ID}/${objectId}/rotations/unknown.png`;
+}
+
+/** Map: which icon-constant ← which PixelLab object id ← which user tag. */
+const ICONS: Array<{ key: string; objectId: string; tag: string }> = [
+  // Spanish-tagged finalised icons.
+  { key: "str",            objectId: "82625831-ca70-4dd6-8f50-5a1201f40394", tag: "fuerza" },
+  { key: "agi",            objectId: "22d0f959-dd5c-40f7-9b7a-9d09b080b6b3", tag: "agilidad" },
+  { key: "int",            objectId: "30d2f467-44e4-476f-9332-f59bc6060415", tag: "inteligencia" },
+  { key: "spi",            objectId: "e2ac88ca-f7e7-4d2d-9463-c7410adf8b57", tag: "espiritu" },
+  { key: "hp",             objectId: "c83b89a0-21ec-4762-81b2-33c1bb618e93", tag: "salud" },
+  { key: "mp",             objectId: "adf703be-ff78-49e2-a691-33192292b56c", tag: "mana" },
+  { key: "def",            objectId: "a067d887-1c72-4a80-9b2a-a92bcb26b6f6", tag: "defensa" },
+  { key: "cat_consumable", objectId: "292e1373-ff98-40e9-9369-eb8cf72c6603", tag: "pocion" },
+  // No Spanish tag yet — fall back to icon-final batch.
+  { key: "atk",            objectId: "74f817c2-3da6-4f00-91dc-d69747b1e244", tag: "icon-final" },
+  { key: "khryn",          objectId: "6ea6bdab-f20c-416f-bc2e-2c90b86d27f4", tag: "icon-final" },
+  { key: "cat_armor",      objectId: "79c1daa6-55e4-4f39-a50f-6a9858fc442a", tag: "icon-final" },
+  { key: "cat_accessory",  objectId: "7f1552ad-bba6-42f3-96f1-451401844d69", tag: "icon-final" },
 ];
 
 (async () => {
   const out: Record<string, string> = {};
   for (const icon of ICONS) {
-    const res = await fetch(icon.rotationUrl);
+    const res = await fetch(rotationUrl(icon.objectId));
     if (!res.ok) {
       console.error(`${icon.key} FAILED ${res.status} ${res.statusText}`);
       continue;
@@ -48,16 +59,16 @@ const ICONS: Array<{ key: string; objectId: string; rotationUrl: string }> = [
       data: buf,
       contentType: "image/png",
       entityType: "ui",
-      entityId: `icon_${icon.key}_color`,
+      entityId: `icon_${icon.key}_v2`,
       field: "sprite",
-      prompt: `Pulled from PixelLab object ${icon.objectId} (tag: icon-final)`,
+      prompt: `Pulled from PixelLab object ${icon.objectId} (tag: ${icon.tag})`,
       endpoint: "pixellab_mcp",
       generationSize: "32x32",
       generatedVia: "mcp",
-      metadata: { pixellab_object_id: icon.objectId, tag: "icon-final" },
+      metadata: { pixellab_object_id: icon.objectId, tag: icon.tag },
     });
     out[icon.key] = reg.url;
-    console.log(`${icon.key.padEnd(15)} ${reg.alreadyExisted ? "(cache hit) " : "(uploaded)  "} ${reg.url}`);
+    console.log(`${icon.key.padEnd(15)} [${icon.tag.padEnd(13)}] ${reg.alreadyExisted ? "(cache hit) " : "(uploaded)  "} ${reg.url}`);
   }
   console.log("\n=== lib/client/icons.ts constants (paste in) ===");
   for (const [k, u] of Object.entries(out)) {
