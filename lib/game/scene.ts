@@ -513,9 +513,13 @@ export class AbyssScene extends Phaser.Scene {
       this.player.setScale(CHARACTER_SCALE);
       this.player.setOrigin(0.5, CHARACTER_ORIGIN_Y);
       this.player.setDepth(10);
-      // Kick the idle loop immediately if frames are present; otherwise the
-      // static rotation texture set above is the fallback.
-      this.playSpriteAnim(this.player, "player", "idle", this.playerDir);
+      // Idle is INTENTIONALLY static (no breathing) per the user-validated
+      // stillness rule — see feedback_static_decor_stillness.md memory +
+      // commit 62cb89d. Calling setPlayerAnimState("idle", force=true)
+      // resets the anim manager so any stray walk frame from the previous
+      // room load is cleared and the sprite holds on its static rotation.
+      this.playerAnimState = "walk"; // force the state machine to TRANSITION
+      this.setPlayerAnimState("idle", true);
       // Follow the player so big maps (>10×8 tiles) don't truncate. lerp
       // smooths step-snapping so the camera glides instead of jumping.
       this.cameras.main.startFollow(this.player, true, 0.18, 0.18);

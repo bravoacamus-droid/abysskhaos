@@ -318,7 +318,7 @@ export async function buildRoomStateForCharacter(
     const [mRes, wRes, aRes, acRes, tRes] = await Promise.all([
       supabase
         .from("items_master")
-        .select("id, name_es, item_type, icon_path")
+        .select("id, name, item_type, icon_path")
         .in("id", ids),
       supabase.from("weapons").select("item_id, handedness, base_atk").in("item_id", ids),
       supabase.from("armor").select("item_id, slot, base_def").in("item_id", ids),
@@ -347,8 +347,8 @@ export async function buildRoomStateForCharacter(
       const ac = acMap.get(id);
       catalog[id] = {
         id,
-        name: m.name_es as string,
-        name_localized: trMap.get(id) ?? (m.name_es as string),
+        name: m.name as string,
+        name_localized: trMap.get(id) ?? (m.name as string),
         item_type: m.item_type as string,
         icon_path: (m.icon_path as string | null) ?? null,
         weapon: w
