@@ -21,7 +21,7 @@ import {
   INT_ICON_URL,
   KHRYN_ICON_URL,
   MP_ICON_URL,
-  SPR_ICON_URL,
+  SPI_ICON_URL,
   STR_ICON_URL,
   categoryIconUrl,
 } from "@/lib/client/icons";
@@ -345,7 +345,7 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
         <StatLine icon={STR_ICON_URL} label="STR" value={p.attr_strength} />
         <StatLine icon={AGI_ICON_URL} label="AGI" value={p.attr_agility} />
         <StatLine icon={INT_ICON_URL} label="INT" value={p.attr_intelligence} />
-        <StatLine icon={SPR_ICON_URL} label="SPR" value={p.attr_spirit} />
+        <StatLine icon={SPI_ICON_URL} label="SPI" value={p.attr_spirit} />
       </div>
     </div>
   );
@@ -679,7 +679,7 @@ function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
         <KV icon={STR_ICON_URL} label="STR" value={p.attr_strength} />
         <KV icon={AGI_ICON_URL} label="AGI" value={p.attr_agility} />
         <KV icon={INT_ICON_URL} label="INT" value={p.attr_intelligence} />
-        <KV icon={SPR_ICON_URL} label="SPR" value={p.attr_spirit} />
+        <KV icon={SPI_ICON_URL} label="SPI" value={p.attr_spirit} />
       </Section>
       <Section title={t(locale, "stats.section_progress")}>
         <KV label={t(locale, "stats.level")} value={p.level} />
