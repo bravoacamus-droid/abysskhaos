@@ -657,11 +657,15 @@ export class AbyssScene extends Phaser.Scene {
       this.roomDecor.push(shadow);
       // Item sprite, with a bobbing y tween. Each ground item gets its
       // own tween so a room with multiple drops doesn't sync them.
+      // Depth 5: above tall props (depth 4 — trees, stepping stones,
+      // statues) but below NPCs (depth 5 they share) and the player
+      // (depth 10). 4.5 would be ideal but Phaser sorts integers fine
+      // with 5; the sword visually pops above stepping stones now.
       const sprite = this.add
         .image(cx, cy, key)
         .setOrigin(0.5, 0.5)
         .setScale(0.7)
-        .setDepth(3);
+        .setDepth(5);
       this.roomDecor.push(sprite);
       const baseY = cy - RENDERED_TILE * 0.05;
       sprite.y = baseY;

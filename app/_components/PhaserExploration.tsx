@@ -474,18 +474,30 @@ export default function PhaserExploration({
           <TutorialHint step={state.player.tutorial_step} locale={locale} />
         ) : null}
 
-        {/* "Z to pick up" floor prompt when standing next to a ground item. */}
+        {/* "Z to pick up" prompt — TAPPABLE button. Positioned above the
+            D-pad area (bottom-44 = 11rem) so the player's left thumb
+            doesn't hit the West arrow by accident. On desktop the Z
+            keyboard handler also triggers the pickup; here we let the
+            player just tap the prompt directly. */}
         {showPickupPrompt ? (
-          <div className="pointer-events-none absolute bottom-20 left-1/2 z-30 -translate-x-1/2">
-            <div className="flex items-center gap-2 rounded border-2 border-abyss-soul/80 bg-abyss-deep/95 px-3 py-1.5 shadow-lg backdrop-blur">
-              <span className="flex h-6 w-6 items-center justify-center rounded border border-abyss-soul/60 bg-abyss-void text-sm font-bold text-abyss-soul">
-                Z
-              </span>
-              <span className="text-xs font-semibold text-white">
-                {t(locale, "tutorial.pickup_prompt")}
-              </span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const scene = sceneRef.current as {
+                getAdjacentGroundItemId?: () => string | null;
+              } | null;
+              const id = scene?.getAdjacentGroundItemId?.();
+              if (id) void doPickup(id);
+            }}
+            className="absolute bottom-44 left-1/2 z-40 -translate-x-1/2 flex items-center gap-2 rounded-lg border-2 border-abyss-soul bg-abyss-deep/95 px-4 py-2 shadow-2xl backdrop-blur hover:bg-abyss-coal/60 active:scale-95 transition animate-pulse"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded border border-abyss-soul/80 bg-abyss-void text-base font-bold text-abyss-soul">
+              Z
+            </span>
+            <span className="text-sm font-semibold text-white">
+              {t(locale, "tutorial.pickup_prompt")}
+            </span>
+          </button>
         ) : null}
 
         {error ? (
@@ -513,6 +525,13 @@ export default function PhaserExploration({
               const refreshed = await fetchRoom({ initData, characterId, locale });
               stateRef.current = refreshed;
               setState(refreshed);
+              // CRITICAL: also push the new state into the Phaser scene
+              // so the room actually re-renders — without this, the
+              // tutorial-spawned ground item (sword) lives in React
+              // state but never appears in the canvas. The player had
+              // to leave + re-enter the room to see it.
+              const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
+              scene?.loadRoom?.(refreshed);
             } catch {
               // best-effort
             }
