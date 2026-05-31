@@ -664,9 +664,27 @@ function InventarioTab({
 
 /* ────────────────────────────────────────────────────────────────────
  * ATRIBUTOS TAB — full stat breakdown
+ *
+ * Renders: combat block (HP/MP/ATK/DEF) → 4 primary attribute groups,
+ * each with their 5 sub-attributes nested underneath → progression
+ * block (level / exp / class / path / title).
+ *
+ * Sub-attribute values: server pre-multiplies primary × effect_per_point
+ * and sends `derived_value`. Null derived_value means the coefficient
+ * is still TBD in the seed — we render "—" rather than hiding the row,
+ * so the player can see what attribute X *will* affect once balance
+ * lands.
  * ────────────────────────────────────────────────────────────────── */
+const ATTR_ICON: Record<string, string> = {
+  strength: STR_ICON_URL,
+  agility: AGI_ICON_URL,
+  intelligence: INT_ICON_URL,
+  spirit: SPI_ICON_URL,
+};
+
 function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
   const p = state.player;
+  const groups = state.attributes_breakdown ?? [];
   return (
     <div className="space-y-3">
       <Section title={t(locale, "stats.section_combat")}>
@@ -675,12 +693,9 @@ function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
         <KV icon={ATK_ICON_URL} label={t(locale, "stats.atk")} value={p.atk} />
         <KV icon={DEF_ICON_URL} label={t(locale, "stats.def")} value={p.def} />
       </Section>
-      <Section title={t(locale, "stats.section_attrs")}>
-        <KV icon={STR_ICON_URL} label="STR" value={p.attr_strength} />
-        <KV icon={AGI_ICON_URL} label="AGI" value={p.attr_agility} />
-        <KV icon={INT_ICON_URL} label="INT" value={p.attr_intelligence} />
-        <KV icon={SPI_ICON_URL} label="SPI" value={p.attr_spirit} />
-      </Section>
+      {groups.map((g) => (
+        <AttributeGroupCard key={g.id} group={g} locale={locale} />
+      ))}
       <Section title={t(locale, "stats.section_progress")}>
         <KV label={t(locale, "stats.level")} value={p.level} />
         <KV label={t(locale, "stats.exp")} value={p.exp.toString()} />
@@ -690,6 +705,115 @@ function AtributosTab({ state, locale }: { state: RoomState; locale: Locale }) {
       </Section>
     </div>
   );
+}
+
+function AttributeGroupCard({
+  group,
+  locale,
+}: {
+  group: NonNullable<RoomState["attributes_breakdown"]>[number];
+  locale: Locale;
+}) {
+  const icon = ATTR_ICON[group.id];
+  return (
+    <div className="rounded border border-abyss-coal/60 bg-abyss-deep/60">
+      {/* Header — primary attr name + abbrev + score */}
+      <div className="flex items-center justify-between gap-2 border-b border-abyss-coal/60 px-2 py-1.5">
+        <div className="flex items-center gap-2">
+          {icon ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={icon}
+              alt=""
+              width={20}
+              height={20}
+              className="h-5 w-5"
+              style={{ imageRendering: "pixelated" }}
+            />
+          ) : null}
+          <div className="flex flex-col leading-tight">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-white">
+              {group.name_localized}
+            </span>
+            <span className="text-[9px] uppercase tracking-widest text-abyss-fog">
+              {group.abbrev}
+            </span>
+          </div>
+        </div>
+        <span className="rounded bg-abyss-soul/15 px-2 py-0.5 text-base font-semibold tabular-nums text-abyss-soul">
+          {group.value}
+        </span>
+      </div>
+      {/* Body — 5 sub-attributes as rows */}
+      <div className="divide-y divide-abyss-coal/40">
+        {group.sub_attributes.map((s) => (
+          <SubAttrRow key={s.id} sub={s} locale={locale} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SubAttrRow({
+  sub,
+  locale,
+}: {
+  sub: NonNullable<RoomState["attributes_breakdown"]>[number]["sub_attributes"][number];
+  locale: Locale;
+}) {
+  const display = formatSubAttrValue(sub.derived_value, sub.effect_unit);
+  const isPending = sub.derived_value === null;
+  return (
+    <div className="flex items-start justify-between gap-3 px-2 py-1.5">
+      <div className="flex min-w-0 flex-col leading-tight">
+        <span className="text-[11px] font-semibold text-white">
+          {sub.name_localized}
+        </span>
+        {sub.description_localized ? (
+          <span className="text-[9px] text-abyss-fog">
+            {sub.description_localized}
+          </span>
+        ) : null}
+      </div>
+      <span
+        className={
+          isPending
+            ? "shrink-0 text-[11px] italic text-abyss-fog/70"
+            : "shrink-0 text-[12px] font-semibold tabular-nums text-abyss-soul"
+        }
+        title={isPending ? t(locale, "stats.subattr_pending_hint") : undefined}
+      >
+        {display}
+      </span>
+    </div>
+  );
+}
+
+/** Format `derived_value` based on `effect_unit`. Returns "—" for
+ *  null (coefficient not yet seeded). */
+function formatSubAttrValue(value: number | null, unit: string | null): string {
+  if (value === null) return "—";
+  const rounded = Math.round(value * 100) / 100;
+  switch (unit) {
+    case "pct":
+    case "pct_drop_chance":
+      return `+${rounded}%`;
+    case "atk_flat":
+    case "def_flat":
+    case "matk_flat":
+    case "hp_flat":
+    case "mp_flat":
+      return `+${rounded}`;
+    case "hp_per_turn":
+    case "mp_per_turn":
+      return `+${rounded}/t`;
+    case "weight":
+      return `+${rounded}`;
+    case "turn_order":
+      return `+${rounded}`;
+    default:
+      return `${rounded}`;
+  }
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

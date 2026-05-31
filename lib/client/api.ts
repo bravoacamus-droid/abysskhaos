@@ -318,6 +318,35 @@ export type RoomState = {
   props: RoomProp[];
   /** Tileable PNG painted as the cave wall halo beyond the playable area. */
   background_tile_url: string | null;
+  /** Server-computed: 4 primaries with localized name + value, each
+   *  with its 5 sub-attributes (name, description, derived value where
+   *  coefficient exists in the seed). Pure read-only — coefficients
+   *  live server-side, derived values are pre-multiplied. */
+  attributes_breakdown: AttributeBreakdownGroup[];
+};
+
+export type SubAttributeBreakdown = {
+  id: string;
+  name_localized: string;
+  description_localized: string | null;
+  /** Null while balance pass is pending (most rows today). */
+  effect_per_point: number | null;
+  /** Unit hint: 'pct', 'atk_flat', 'hp_flat', 'mp_flat', 'hp_per_turn',
+   *  'mp_per_turn', 'def_flat', 'matk_flat', 'pct_drop_chance',
+   *  'turn_order', 'weight' — drives display formatting in the UI. */
+  effect_unit: string | null;
+  /** Null when effect_per_point is null; otherwise primary * coeff. */
+  derived_value: number | null;
+};
+
+export type AttributeBreakdownGroup = {
+  id: string;
+  abbrev: string;
+  name_localized: string;
+  description_localized: string | null;
+  /** Primary attr score from the character row. */
+  value: number;
+  sub_attributes: SubAttributeBreakdown[];
 };
 
 export type DialogueLine = {

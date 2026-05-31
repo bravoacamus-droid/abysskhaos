@@ -164,7 +164,8 @@
     "title": "Título",
     "section_combat": "Combate",
     "section_attrs": "Atributos primarios",
-    "section_progress": "Progresión"
+    "section_progress": "Progresión",
+    "subattr_pending_hint": "El coeficiente de balance aún no está definido."
   },
   "errors": {
     "generic": "Algo salió mal",

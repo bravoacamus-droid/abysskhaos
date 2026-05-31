@@ -11,6 +11,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { buildAttributeBreakdown } from "./attributes";
+
 export type RoomStateBuildError =
   | { kind: "NOT_FOUND" }
   | { kind: "TUTORIAL_NOT_SEEDED" }
@@ -383,6 +385,23 @@ export async function buildRoomStateForCharacter(
       metadata: r.metadata,
     }));
 
+  // Attribute breakdown: 4 primaries with their 5 sub-attributes each,
+  // names localized, derived values computed from the character row.
+  // Loaded in parallel with the rest of the room data above would be
+  // ideal, but it depends on character.attr_* so we run it here. Cost
+  // is ~2 small lookups (attributes 4 rows, sub_attributes 20 rows)
+  // + translations — fast and read-only.
+  const attributesBreakdown = await buildAttributeBreakdown(
+    supabase,
+    {
+      attr_strength: (character.attr_strength as number | null) ?? 0,
+      attr_agility: (character.attr_agility as number | null) ?? 0,
+      attr_intelligence: (character.attr_intelligence as number | null) ?? 0,
+      attr_spirit: (character.attr_spirit as number | null) ?? 0,
+    },
+    locale,
+  );
+
   const groundItems = groundRows.map((g) => ({
     id: g.id as string,
     item_id: g.item_id as string,
@@ -449,6 +468,7 @@ export async function buildRoomStateForCharacter(
       npcs,
       props: hydratedProps,
       background_tile_url: backgroundTileUrl,
+      attributes_breakdown: attributesBreakdown,
     },
   };
 }
