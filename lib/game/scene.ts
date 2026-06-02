@@ -616,9 +616,11 @@ export class AbyssScene extends Phaser.Scene {
       // the trigger tile, then play once. The fish-jump-on-bridge in
       // r02 is the canonical case.
       const oneShotStep = prop.metadata?.one_shot_on_step as { x: number; y: number } | undefined;
-      // Use Sprite (not Image) when we have animation frames so we can
-      // play Phaser.Animation; Image is fine for static decor.
-      const useSprite = !!animFrames;
+      // Use Sprite (not Image) when we either have animation frames OR
+      // a one-shot trigger — one-shots need .setVisible() + may run a
+      // tween-only fallback (no frames). Image is only used for purely
+      // static decor.
+      const useSprite = !!animFrames || !!oneShotStep;
       const obj = useSprite
         ? this.add.sprite(cx, cy, key)
         : this.add.image(cx, cy, key);
@@ -637,6 +639,8 @@ export class AbyssScene extends Phaser.Scene {
       if (prop.collision) {
         this.propBlockers.add(`${prop.x},${prop.y}`);
       }
+      // Optional Phaser.Animation registration — only when frames exist.
+      let registeredAnimKey: string | null = null;
       if (useSprite && animFrames) {
         const animKey = `prop-anim-${prop.kind}`;
         // One-shot animations are NON-LOOPING; everything else loops
@@ -655,19 +659,23 @@ export class AbyssScene extends Phaser.Scene {
             });
           }
         }
-        if (oneShotStep) {
-          // Hide until player steps on the trigger tile; tryOneShotTriggers
-          // (called from attemptMove) will show + play + auto-hide.
-          (obj as Phaser.GameObjects.Sprite).setVisible(false);
-          this.oneShotTriggers.push({
-            sprite: obj as Phaser.GameObjects.Sprite,
-            animKey: this.anims.exists(animKey) ? animKey : null,
-            stepTile: { x: oneShotStep.x, y: oneShotStep.y },
-            played: false,
-          });
-        } else if (this.anims.exists(animKey)) {
-          (obj as Phaser.GameObjects.Sprite).play(animKey);
-        }
+        if (this.anims.exists(animKey)) registeredAnimKey = animKey;
+      }
+
+      if (oneShotStep) {
+        // ALWAYS hide one-shot props on spawn (even when no animation
+        // frames exist) and register the trigger. tryOneShotTriggers,
+        // called from attemptMove, will reveal + play / tween + hide
+        // when the player steps onto the trigger tile.
+        (obj as Phaser.GameObjects.Sprite).setVisible(false);
+        this.oneShotTriggers.push({
+          sprite: obj as Phaser.GameObjects.Sprite,
+          animKey: registeredAnimKey,
+          stepTile: { x: oneShotStep.x, y: oneShotStep.y },
+          played: false,
+        });
+      } else if (registeredAnimKey) {
+        (obj as Phaser.GameObjects.Sprite).play(registeredAnimKey);
       }
       if (prop.kind === "portal_hyperdimensional") {
         // Soft halo behind the sprite to widen its presence; the sprite
