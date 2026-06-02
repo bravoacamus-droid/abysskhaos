@@ -294,6 +294,16 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
   // class portrait shows the warrior holding a sword by default, which
   // misrepresents what's actually equipped right now.
   const spriteUrl = p.sprite_atlas?.south ?? null;
+  // Overlay icon for the currently-equipped main-hand weapon. Floats
+  // bottom-right of the sprite box like an item-tooltip pinned to the
+  // character — refs (Chrono Trigger / FF VI / Octopath) don't render
+  // equipped weapons on overworld sprites either, so we do this in UI
+  // chrome instead. Phase 4 will move the weapon into per-class attack
+  // animations during battle (see project_phase4_attack_animations).
+  const mainHand = state.equipped.find((e) => e.slot === "main_hand");
+  const mainHandCat = mainHand ? state.item_catalog[mainHand.item_id] : null;
+  const mainHandIcon = mainHandCat?.icon_path ?? null;
+  const mainHandName = mainHandCat?.name_localized ?? null;
   // Use the effective max (base + equipped bonus_hp/mp) for both the
   // bar denominator and the percentage. Equipping a +10 HP weapon now
   // bumps the bar's max instantly; hp_current isn't auto-bumped, so
@@ -305,8 +315,8 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
   const mpPct = mpMax > 0 ? (p.mp_current / mpMax) * 100 : 0;
   return (
     <div className="space-y-2">
-      {/* Sprite preview box */}
-      <div className="flex aspect-square items-center justify-center rounded border border-abyss-coal/80 bg-abyss-void">
+      {/* Sprite preview box + equipped-weapon overlay */}
+      <div className="relative flex aspect-square items-center justify-center rounded border border-abyss-coal/80 bg-abyss-void">
         {spriteUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -318,6 +328,27 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
         ) : (
           <span className="text-3xl text-abyss-fog">?</span>
         )}
+        {mainHandIcon ? (
+          // Pinned bottom-right; uses the slot frame to read as an
+          // "equipped" badge rather than a stray sprite.
+          <div
+            className="absolute bottom-1 right-1 h-10 w-10"
+            style={{
+              backgroundImage: `url(${SLOT_FRAME_URL})`,
+              backgroundSize: "100% 100%",
+              imageRendering: "pixelated",
+            }}
+            title={mainHandName ?? undefined}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mainHandIcon}
+              alt={mainHandName ?? ""}
+              className="absolute inset-1 h-[calc(100%-8px)] w-[calc(100%-8px)] object-contain"
+              style={{ imageRendering: "pixelated" }}
+            />
+          </div>
+        ) : null}
       </div>
       {/* Name + class */}
       <div className="text-center">
