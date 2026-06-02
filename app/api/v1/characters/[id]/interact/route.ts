@@ -73,7 +73,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: character, error: charErr } = await supabase
     .from("characters")
-    .select("id, user_id, current_room_id")
+    .select("id, user_id, current_room_id, opened_props")
     .eq("id", params.id)
     .eq("is_active", true)
     .maybeSingle();
@@ -83,6 +83,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
   if (!character.current_room_id) {
     return NextResponse.json({ error: "NO_CURRENT_ROOM" }, { status: 409 });
+  }
+
+  // Per-character "already opened" check. Key format must match what
+  // RoomState exposes + what the scene reads to render the open variant.
+  const propKey = `${character.current_room_id as string}:${propKind}:${tileX}:${tileY}`;
+  const openedProps = (character.opened_props as string[] | null) ?? [];
+  if (openedProps.includes(propKey)) {
+    return NextResponse.json({ error: "PROP_ALREADY_OPENED" }, { status: 409 });
   }
 
   // Verify the prop exists in the room's tilemap at the named tile.
@@ -165,6 +173,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       });
       if (addErr) return NextResponse.json({ error: "DB_FAILED", detail: addErr.message }, { status: 500 });
     }
+  }
+
+  // Mark the prop as opened by this character. Append to the array.
+  // We use the raw SQL append-if-missing pattern via .update to avoid
+  // a read-modify-write race — postgres `array_append` is atomic and
+  // the GIN index covers the lookup we just did.
+  const { error: openErr } = await supabase
+    .from("characters")
+    .update({ opened_props: [...openedProps, propKey] })
+    .eq("id", character.id);
+  if (openErr) {
+    return NextResponse.json({ error: "DB_FAILED", detail: openErr.message }, { status: 500 });
   }
 
   const locale = typeof body.locale === "string" ? body.locale : "en";

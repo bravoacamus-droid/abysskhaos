@@ -142,6 +142,11 @@ export class AbyssScene extends Phaser.Scene {
    *  contains an `interact` block. Same adjacency rule as ground
    *  items (own tile + 4 neighbours). */
   private adjacentInteractableProp: { kind: string; x: number; y: number } | null = null;
+  /** Set by loadRoom when re-loading the SAME room (e.g. after /interact
+   *  refresh). buildRoomFromState reads it once instead of map.spawn so
+   *  the player doesn't snap back to the entry door. Cleared after use. */
+  private preservedPlayerTile: { x: number; y: number } | null = null;
+  private preservedPlayerDir: Direction | null = null;
   /** One-shot ambient triggers — props whose metadata declares
    *  `one_shot_on_step: { x, y }` stay invisible until the player
    *  steps onto the named tile, then play their animation once
@@ -196,9 +201,29 @@ export class AbyssScene extends Phaser.Scene {
    * keeping `this.callbacks` stable across transitions.
    */
   loadRoom(newState: RoomState) {
+    // If the room id is unchanged (e.g. /interact returned a refresh
+    // of the same room because the chest changed visual state), keep
+    // the player exactly where they are. Otherwise buildRoomFromState
+    // resets to map.spawn — which the room-state builder may have
+    // pinned to the entry door if current_room_entry_dir is still
+    // set from the previous /move, teleporting the player BACK to
+    // the door they came in through. That was the "regresa a la
+    // puerta" bug after picking up potions.
+    const sameRoomReload =
+      this.booted && this.state && this.state.room.id === newState.room.id;
+    const preservedTile = sameRoomReload ? { ...this.playerTile } : null;
+    const preservedDir = sameRoomReload ? this.playerDir : null;
+
     this.state = newState;
     this.adjacentNpcId = null;
     this.virtualDir = null;
+    if (preservedTile) {
+      // Stash so buildRoomFromState (called below via onComplete)
+      // can pick the saved tile up after it would otherwise read
+      // map.spawn. The variable is cleared after one use.
+      this.preservedPlayerTile = preservedTile;
+      this.preservedPlayerDir = preservedDir;
+    }
     // Do NOT reset moveCooldownMs to 0. The exit trigger set it to
     // 1000ms; if we wipe it the user holding a keyboard arrow (which
     // ignores virtualDir clearing) auto-steps the moment the new
@@ -319,6 +344,17 @@ export class AbyssScene extends Phaser.Scene {
             queued.push(fk);
           }
         });
+      }
+      // Pre-queue the opened-state sprite for any prop that ships one,
+      // so the swap on /interact is instant (no flicker waiting for
+      // the texture to land).
+      const openedUrl = prop.metadata?.opened_sprite_url as string | undefined;
+      if (openedUrl) {
+        const ok = `${propTextureKey(prop.kind)}-opened`;
+        if (!this.textures.exists(ok)) {
+          this.load.image(ok, openedUrl);
+          queued.push(ok);
+        }
       }
     }
 
@@ -529,8 +565,18 @@ export class AbyssScene extends Phaser.Scene {
     this.cameras.main.setBounds(haloX, haloY, haloW, haloH);
     this.cameras.main.centerOn(mapPxW / 2, mapPxH / 2);
 
-    this.playerTile = { ...map.spawn };
-    this.playerDir = "south";
+    // Same-room reloads (e.g. /interact returned a refresh) preserve
+    // the player's actual tile + facing so they don't snap back to
+    // the entry door. Cross-room transitions use map.spawn as usual.
+    if (this.preservedPlayerTile) {
+      this.playerTile = this.preservedPlayerTile;
+      this.playerDir = this.preservedPlayerDir ?? "south";
+      this.preservedPlayerTile = null;
+      this.preservedPlayerDir = null;
+    } else {
+      this.playerTile = { ...map.spawn };
+      this.playerDir = "south";
+    }
     this.playerAnimState = "idle";
     this.createAnimationsFor("player", s.player.animation_atlas ?? null);
     const playerKey = this.spriteKeyForDir("player", this.playerDir);
@@ -605,8 +651,16 @@ export class AbyssScene extends Phaser.Scene {
     // Map props: paint each one over its tile with the right depth and
     // add collidable ones to the blocker set (already cleared+populated
     // by the NPC loop above; we just append here).
+    const openedProps = new Set(s.player.opened_props ?? []);
     for (const prop of s.props ?? []) {
-      const key = propTextureKey(prop.kind);
+      // If the prop has been opened by THIS character AND it ships an
+      // `opened_sprite_url` in metadata, swap to the opened texture.
+      // Z interact also gets suppressed below (checkGroundAdjacency).
+      const propKey = `${s.room.id}:${prop.kind}:${prop.x}:${prop.y}`;
+      const isOpened = openedProps.has(propKey);
+      const hasOpenedSprite = !!(prop.metadata?.opened_sprite_url as string | undefined);
+      const baseKey = propTextureKey(prop.kind);
+      const key = isOpened && hasOpenedSprite ? `${baseKey}-opened` : baseKey;
       if (!this.textures.exists(key)) continue;
       const cx = prop.x * RENDERED_TILE + RENDERED_TILE / 2;
       const cy = prop.y * RENDERED_TILE + RENDERED_TILE / 2;
@@ -951,10 +1005,15 @@ export class AbyssScene extends Phaser.Scene {
     // Same scan for interactable props. We can't walk *onto* a chest
     // (collision=true), so neighbours-only is the realistic case, but
     // dx+dy<=1 keeps it symmetrical with the pickup rule above.
+    // ALREADY-OPENED props are skipped so the Z prompt doesn't lie
+    // about being able to interact with a chest that's empty.
+    const openedSet = new Set(this.state.player.opened_props ?? []);
     let prop: { kind: string; x: number; y: number } | null = null;
     for (const p of this.state.props ?? []) {
       const interact = (p.metadata as { interact?: unknown } | null)?.interact;
       if (!interact) continue;
+      const key = `${this.state.room.id}:${p.kind}:${p.x}:${p.y}`;
+      if (openedSet.has(key)) continue;
       const dx = Math.abs(p.x - this.playerTile.x);
       const dy = Math.abs(p.y - this.playerTile.y);
       if (dx + dy <= 1) {

@@ -332,6 +332,11 @@ export type RoomState = {
     title_id: string | null;
     path_id: string | null;
     khryn: number;
+    /** Composite keys of every prop this character has already
+     *  triggered. Format: `${room_id}:${prop_kind}:${tile_x}:${tile_y}`.
+     *  Used by the scene to render the "opened" chest variant + skip
+     *  the Z interact prompt for already-opened chests. */
+    opened_props: string[];
   };
   /** Items in the character's backpack grid (slot 0-39). */
   inventory: CharacterItem[];

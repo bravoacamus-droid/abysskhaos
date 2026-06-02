@@ -42,7 +42,7 @@ export async function buildRoomStateForCharacter(
   const { data: character, error: charErr } = await supabase
     .from("characters")
     .select(
-      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step, name, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, title_id, path_id, khryn",
+      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step, name, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, title_id, path_id, khryn, opened_props",
     )
     .eq("id", characterId)
     .eq("is_active", true)
@@ -505,6 +505,12 @@ export async function buildRoomStateForCharacter(
         title_id: (character.title_id as string | null) ?? null,
         path_id: (character.path_id as string | null) ?? null,
         khryn: (character.khryn as number | null) ?? 0,
+        // Per-character record of which interactable props this
+        // character has already opened. Key format:
+        //   `${room_id}:${prop_kind}:${tile_x}:${tile_y}`
+        // The scene reads this to render the "opened" variant of
+        // the chest sprite + suppress the Z interact prompt.
+        opened_props: ((character.opened_props as string[] | null) ?? []),
       },
       inventory,
       equipped,
