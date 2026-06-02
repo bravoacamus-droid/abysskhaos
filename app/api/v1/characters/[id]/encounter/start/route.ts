@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { buildRoomStateForCharacter, roomStateErrorResponse } from "@/lib/server/room-state";
+import {
+  buildInitialCombatSession,
+  type CombatSessionState,
+} from "@/lib/server/combat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: character, error: charErr } = await supabase
     .from("characters")
-    .select("id, user_id, current_room_id, seen_encounters")
+    .select("id, user_id, current_room_id, seen_encounters, hp_current, hp_max, atk, def")
     .eq("id", params.id)
     .eq("is_active", true)
     .maybeSingle();
@@ -156,10 +160,94 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const { status, body: errBody } = roomStateErrorResponse(roomState.error);
     return NextResponse.json(errBody, { status });
   }
+  // Create the combat session (or return an active one if the user
+  // somehow re-fires this endpoint mid-fight — the partial unique
+  // index combat_sessions_one_active_per_character_idx enforces
+  // at-most-one).
+  const { data: existing } = await supabase
+    .from("combat_sessions")
+    .select("*")
+    .eq("character_id", character.id)
+    .eq("is_over", false)
+    .maybeSingle();
+
+  let combatSession: CombatSessionState | null = null;
+  if (existing) {
+    combatSession = {
+      id: existing.id as string,
+      encounter_id: existing.encounter_id as string,
+      player_hp: existing.player_hp as number,
+      player_max_hp: existing.player_max_hp as number,
+      player_atk: existing.player_atk as number,
+      player_def: existing.player_def as number,
+      mobs: existing.mobs as CombatSessionState["mobs"],
+      turn_order: existing.turn_order as CombatSessionState["turn_order"],
+      turn_idx: existing.turn_idx as number,
+      log_entries: existing.log_entries as CombatSessionState["log_entries"],
+      is_over: existing.is_over as boolean,
+      outcome: existing.outcome as CombatSessionState["outcome"],
+    };
+  } else {
+    const initial = buildInitialCombatSession({
+      encounterId,
+      player: {
+        hp_current: (character.hp_current as number | null) ?? 1,
+        hp_max: (character.hp_max as number | null) ?? 1,
+        atk: (character.atk as number | null) ?? 1,
+        def: (character.def as number | null) ?? 0,
+      },
+      mobs: mobs.map((m) => ({
+        id: m.id,
+        name: m.name,
+        hp_max: m.hp_max,
+        atk: m.atk,
+        def: m.def,
+        exp: m.exp,
+        sprite_atlas: m.sprite_atlas,
+      })),
+    });
+    const { data: ins, error: insErr } = await supabase
+      .from("combat_sessions")
+      .insert({
+        character_id: character.id,
+        encounter_id: initial.encounter_id,
+        player_hp: initial.player_hp,
+        player_max_hp: initial.player_max_hp,
+        player_atk: initial.player_atk,
+        player_def: initial.player_def,
+        mobs: initial.mobs,
+        turn_order: initial.turn_order,
+        turn_idx: initial.turn_idx,
+        log_entries: initial.log_entries,
+        is_over: initial.is_over,
+        outcome: initial.outcome,
+      })
+      .select("*")
+      .single();
+    if (insErr) {
+      return NextResponse.json({ error: "DB_FAILED", detail: insErr.message }, { status: 500 });
+    }
+    combatSession = {
+      id: ins.id as string,
+      encounter_id: ins.encounter_id as string,
+      player_hp: ins.player_hp as number,
+      player_max_hp: ins.player_max_hp as number,
+      player_atk: ins.player_atk as number,
+      player_def: ins.player_def as number,
+      mobs: ins.mobs as CombatSessionState["mobs"],
+      turn_order: ins.turn_order as CombatSessionState["turn_order"],
+      turn_idx: ins.turn_idx as number,
+      log_entries: ins.log_entries as CombatSessionState["log_entries"],
+      is_over: ins.is_over as boolean,
+      outcome: ins.outcome as CombatSessionState["outcome"],
+    };
+  }
+
   return NextResponse.json({
     data: {
       encounter_id: encounterId,
       mobs,
+      combat_session: combatSession,
       room_state: roomState.data,
     },
   });

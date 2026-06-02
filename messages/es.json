@@ -92,8 +92,21 @@
   },
   "combat": {
     "encounter_title": "¡Emboscada!",
-    "placeholder_message": "El combate por turnos llega en la próxima actualización. Por ahora los enemigos se retiran.",
-    "placeholder_continue": "Continuar"
+    "action_attack": "Atacar",
+    "your_turn": "Tu turno",
+    "enemy_turn": "Turno enemigo",
+    "resolving": "Resolviendo…",
+    "actor_you": "Tú",
+    "log_attack": "{actor} ataca a {target} — {dmg} de daño",
+    "log_death": "{actor} cae derrotado",
+    "log_victory": "¡Victoria! +{exp} EXP · +{khryn} Khryn",
+    "log_defeat": "Has sido derrotado…",
+    "victory_title": "Victoria",
+    "victory_body": "+{exp} EXP · +{khryn} Khryn",
+    "defeat_title": "Derrota",
+    "defeat_body": "Tu alma vuelve al Umbral con la vida restaurada.",
+    "continue": "Continuar",
+    "respawn": "Renacer en r01"
   },
   "interact": {
     "open_prompt": "Z para abrir",

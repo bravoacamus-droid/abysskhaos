@@ -92,8 +92,21 @@
   },
   "combat": {
     "encounter_title": "Ambush!",
-    "placeholder_message": "Turn-based combat ships in the next update. For now the enemies retreat.",
-    "placeholder_continue": "Continue"
+    "action_attack": "Attack",
+    "your_turn": "Your turn",
+    "enemy_turn": "Enemy turn",
+    "resolving": "Resolving…",
+    "actor_you": "You",
+    "log_attack": "{actor} hits {target} — {dmg} dmg",
+    "log_death": "{actor} falls",
+    "log_victory": "Victory! +{exp} EXP · +{khryn} Khryn",
+    "log_defeat": "You were defeated…",
+    "victory_title": "Victory",
+    "victory_body": "+{exp} EXP · +{khryn} Khryn",
+    "defeat_title": "Defeat",
+    "defeat_body": "Your soul returns to the Threshold with full health.",
+    "continue": "Continue",
+    "respawn": "Respawn at r01"
   },
   "interact": {
     "open_prompt": "Z to open",

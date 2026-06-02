@@ -501,12 +501,70 @@ export type EncounterMob = {
   animation_atlas: Record<string, Record<string, string[]>> | null;
 };
 
+export type CombatMobState = {
+  id: string;
+  name: string;
+  hp: number;
+  max_hp: number;
+  atk: number;
+  def: number;
+  exp: number;
+  alive: boolean;
+  sprite_atlas: Record<string, string> | null;
+};
+
+export type CombatTurn = { kind: "player" } | { kind: "mob"; idx: number };
+
+export type CombatLogEntry =
+  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number }
+  | { turn: number; kind: "death"; actor: string }
+  | { turn: number; kind: "victory"; exp_awarded: number; khryn_awarded: number }
+  | { turn: number; kind: "defeat" };
+
+export type CombatSession = {
+  id: string;
+  encounter_id: string;
+  player_hp: number;
+  player_max_hp: number;
+  player_atk: number;
+  player_def: number;
+  mobs: CombatMobState[];
+  turn_order: CombatTurn[];
+  turn_idx: number;
+  log_entries: CombatLogEntry[];
+  is_over: boolean;
+  outcome: "victory" | "defeat" | null;
+};
+
 export function startEncounter(
   opts: FetchOpts & { characterId: string; encounterId: string; locale: string },
-): Promise<{ encounter_id: string; mobs: EncounterMob[]; room_state: RoomState }> {
+): Promise<{ encounter_id: string; mobs: EncounterMob[]; combat_session: CombatSession; room_state: RoomState }> {
   return call(`/api/v1/characters/${opts.characterId}/encounter/start`, "POST", {
     initData: opts.initData,
     body: { encounter_id: opts.encounterId, locale: opts.locale },
+    signal: opts.signal,
+  });
+}
+
+/** POST /combat/action — single-player-attack + auto-resolved mob
+ *  counter-attacks until back to the player's turn or combat ends. */
+export function sendCombatAction(
+  opts: FetchOpts & {
+    characterId: string;
+    sessionId: string;
+    action: "attack";
+    targetMobIdx: number;
+    locale: string;
+  },
+): Promise<{ session: CombatSession; appended: CombatLogEntry[]; room_state: RoomState }> {
+  return call(`/api/v1/characters/${opts.characterId}/combat/action`, "POST", {
+    initData: opts.initData,
+    body: {
+      session_id: opts.sessionId,
+      action: opts.action,
+      target_mob_idx: opts.targetMobIdx,
+      locale: opts.locale,
+    },
     signal: opts.signal,
   });
 }
