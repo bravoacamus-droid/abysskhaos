@@ -337,6 +337,11 @@ export type RoomState = {
      *  Used by the scene to render the "opened" chest variant + skip
      *  the Z interact prompt for already-opened chests. */
     opened_props: string[];
+    /** Encounter IDs that have ALREADY fired for this character. The
+     *  scene suppresses re-trigger on tiles whose encounter_id is in
+     *  this set. Format is the encounter_id string the prop declares
+     *  in metadata. */
+    seen_encounters: string[];
   };
   /** Items in the character's backpack grid (slot 0-39). */
   inventory: CharacterItem[];
@@ -483,6 +488,28 @@ export type InteractReward = {
   message_key: string;
   items: Array<{ item_id: string; quantity?: number }>;
 };
+
+export type EncounterMob = {
+  id: string;
+  name: string;
+  name_localized: string;
+  hp_max: number;
+  atk: number;
+  def: number;
+  exp: number;
+  sprite_atlas: Record<string, string> | null;
+  animation_atlas: Record<string, Record<string, string[]>> | null;
+};
+
+export function startEncounter(
+  opts: FetchOpts & { characterId: string; encounterId: string; locale: string },
+): Promise<{ encounter_id: string; mobs: EncounterMob[]; room_state: RoomState }> {
+  return call(`/api/v1/characters/${opts.characterId}/encounter/start`, "POST", {
+    initData: opts.initData,
+    body: { encounter_id: opts.encounterId, locale: opts.locale },
+    signal: opts.signal,
+  });
+}
 
 export function interactWithProp(
   opts: FetchOpts & {

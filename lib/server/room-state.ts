@@ -42,7 +42,7 @@ export async function buildRoomStateForCharacter(
   const { data: character, error: charErr } = await supabase
     .from("characters")
     .select(
-      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step, name, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, title_id, path_id, khryn, opened_props",
+      "id, user_id, current_room_id, current_floor, class_id, current_room_entry_dir, tutorial_step, name, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, title_id, path_id, khryn, opened_props, seen_encounters",
     )
     .eq("id", characterId)
     .eq("is_active", true)
@@ -511,6 +511,12 @@ export async function buildRoomStateForCharacter(
         // The scene reads this to render the "opened" variant of
         // the chest sprite + suppress the Z interact prompt.
         opened_props: ((character.opened_props as string[] | null) ?? []),
+        // Per-character record of scripted encounters that have
+        // ALREADY fired (centaur+archer ambush, future cutscenes).
+        // The scene checks this before firing an encounter trigger
+        // so the cutscene doesn't replay every time the player
+        // walks past the same tile.
+        seen_encounters: ((character.seen_encounters as string[] | null) ?? []),
       },
       inventory,
       equipped,

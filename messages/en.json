@@ -90,6 +90,11 @@
     "dialogue_close": "End",
     "talk_prompt": "Tap to speak"
   },
+  "combat": {
+    "encounter_title": "Ambush!",
+    "placeholder_message": "Turn-based combat ships in the next update. For now the enemies retreat.",
+    "placeholder_continue": "Continue"
+  },
   "interact": {
     "open_prompt": "Z to open",
     "chest_potions_x2": "You found 2 minor health potions! (each heals 50 HP)",

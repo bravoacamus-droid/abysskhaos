@@ -90,6 +90,11 @@
     "dialogue_close": "Terminar",
     "talk_prompt": "Toca para hablar"
   },
+  "combat": {
+    "encounter_title": "¡Emboscada!",
+    "placeholder_message": "El combate por turnos llega en la próxima actualización. Por ahora los enemigos se retiran.",
+    "placeholder_continue": "Continuar"
+  },
   "interact": {
     "open_prompt": "Z para abrir",
     "chest_potions_x2": "¡Obtuviste 2 pociones menores de vida! (cada una cura 50 PV)",

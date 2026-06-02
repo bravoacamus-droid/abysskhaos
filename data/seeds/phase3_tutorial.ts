@@ -219,6 +219,17 @@ const TILEMAPS: Record<string, TilemapData> = {
       // (user feedback: at (5,5) the fish read like it was on the
       // bridge planks rather than out in the river).
       { kind: "river_fish_jump", x: 3, y: 5 },
+      // Phase 4a — bridge ambush encounter trigger. Sits 3 tiles
+      // south of the bridge, invisible. When the player crosses
+      // the bridge + continues south to this tile for the FIRST
+      // time, the scene fires onEncounterTriggered with
+      // encounter_id 'f100_r02_bridge_ambush' + mob_ids
+      // [centaur_warrior, lizardman_archer]. React runs the
+      // cutscene (mobs walk in from the south door at 6,10) and
+      // shows the placeholder pre-combat modal. encounter_id is
+      // appended to characters.seen_encounters so retriggering
+      // is suppressed.
+      { kind: "encounter_trigger_centaur_archer", x: 6, y: 8 },
     ],
   },
   // The Guardian's Chamber — boss room. The white dragon dominates the

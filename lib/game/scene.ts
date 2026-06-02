@@ -102,6 +102,10 @@ export type SceneCallbacks = {
    *  whose metadata declares it interactable (chests, levers, …).
    *  React calls /interact with the prop kind + tile coordinates. */
   onPropInteract?: (propKind: string, tileX: number, tileY: number) => void;
+  /** Fired when the player steps onto a tile occupied by an encounter
+   *  trigger prop (metadata.encounter_id set + encounter_id NOT in
+   *  player.seen_encounters). React kicks off the cutscene flow. */
+  onEncounterTriggered?: (encounterId: string, mobIds: string[]) => void;
 };
 
 export type SceneInitData = { state: RoomState; callbacks?: SceneCallbacks };
@@ -147,6 +151,23 @@ export class AbyssScene extends Phaser.Scene {
    *  the player doesn't snap back to the entry door. Cleared after use. */
   private preservedPlayerTile: { x: number; y: number } | null = null;
   private preservedPlayerDir: Direction | null = null;
+  /** Encounter triggers in the current room. attemptMove checks this
+   *  after every committed step; if the player's new tile matches a
+   *  trigger AND the encounter hasn't already fired, the React
+   *  callback runs (which kicks off the cutscene + combat flow).
+   *  Cleared on every room rebuild. */
+  private encounterTriggers: Array<{
+    tile: { x: number; y: number };
+    encounterId: string;
+    mobIds: string[];
+  }> = [];
+  /** Local copy of player.seen_encounters; lets us suppress a
+   *  same-session retrigger after the React callback fires but before
+   *  the server-confirmed RoomState arrives. */
+  private localSeenEncounters = new Set<string>();
+  /** Set true while a cutscene is playing — attemptMove ignores input
+   *  so the player can't walk away from the camera moment. */
+  private cutsceneActive = false;
   /** One-shot ambient triggers — props whose metadata declares
    *  `one_shot_on_step: { x, y }` stay invisible until the player
    *  steps onto the named tile, then play their animation once
@@ -358,6 +379,30 @@ export class AbyssScene extends Phaser.Scene {
       }
     }
 
+    // Pre-queue cutscene mob assets if any encounter trigger in this
+    // room declares mob_assets in its metadata (centaur + archer for
+    // the bridge ambush). Loading here means the cutscene transition
+    // is instant when the trigger fires; no perceptible "loading" beat.
+    for (const prop of s.props ?? []) {
+      const mobAssets = prop.metadata?.mob_assets as
+        | Array<{ id: string; sprite_atlas?: Record<string, string>; animation_atlas?: Record<string, Record<string, string[]>> }>
+        | undefined;
+      if (!mobAssets) continue;
+      for (const m of mobAssets) {
+        if (m.sprite_atlas) {
+          for (const dir of ALL_DIRECTIONS) {
+            const url = m.sprite_atlas[dir];
+            const key = `mob-${m.id}-${dir}`;
+            if (url && !this.textures.exists(key)) {
+              this.load.image(key, url);
+              queued.push(key);
+            }
+          }
+        }
+        queued.push(...this.queueAnimationAssets(`mob-${m.id}`, m.animation_atlas ?? null));
+      }
+    }
+
     for (const npc of s.npcs) {
       if (npc.sprite_atlas) {
         for (const dir of ALL_DIRECTIONS) {
@@ -473,6 +518,11 @@ export class AbyssScene extends Phaser.Scene {
     // Wipe one-shot trigger state too — re-entering a room should
     // play the fish jump (etc.) again.
     this.oneShotTriggers = [];
+    // Wipe encounter trigger state — buildRoomFromState repopulates
+    // from the new room's props. Hydrate the local-seen set from the
+    // latest server state.
+    this.encounterTriggers = [];
+    this.localSeenEncounters = new Set(this.state?.player.seen_encounters ?? []);
     if (this.tilemap) {
       this.tilemap.destroy();
       this.tilemap = undefined;
@@ -731,6 +781,23 @@ export class AbyssScene extends Phaser.Scene {
       } else if (registeredAnimKey) {
         (obj as Phaser.GameObjects.Sprite).play(registeredAnimKey);
       }
+
+      // Invisible encounter triggers: drop the sprite, just register
+      // tile + encounter_id + mob_ids for tryEncounterTrigger to fire
+      // when the player steps on. metadata.invisible_trigger flags the
+      // entry; collision stays false so the player can walk onto it.
+      const encounterId = prop.metadata?.encounter_id as string | undefined;
+      if (prop.metadata?.invisible_trigger || encounterId) {
+        obj.setVisible(false);
+      }
+      if (encounterId) {
+        const mobIds = (prop.metadata?.mob_ids as string[] | undefined) ?? [];
+        this.encounterTriggers.push({
+          tile: { x: prop.x, y: prop.y },
+          encounterId,
+          mobIds,
+        });
+      }
       if (prop.kind === "portal_hyperdimensional") {
         // Soft halo behind the sprite to widen its presence; the sprite
         // itself now carries its own swirl animation so we no longer
@@ -909,6 +976,13 @@ export class AbyssScene extends Phaser.Scene {
     const map = this.state.room.tilemap_data;
     if (!map) return;
 
+    // Freeze input during cutscenes (enemy walk-in, future combat
+    // transitions) so the player can't drift mid-camera-moment.
+    if (this.cutsceneActive) {
+      this.setPlayerAnimState("idle");
+      return;
+    }
+
     // Tutorial gating: if React has narrowed the allowed direction set
     // (e.g. only south during walk_to_cedric), silently ignore other
     // directions. The player can still turn-in-place via setPlayerFacing
@@ -952,6 +1026,7 @@ export class AbyssScene extends Phaser.Scene {
     this.checkNpcAdjacency();
     this.checkGroundAdjacency();
     this.tryOneShotTriggers();
+    this.tryEncounterTrigger();
 
     // Did we land on an exit tile? If so, fire the transition trigger.
     // React-side doMove awaits at least MOVE_TWEEN_MS before calling
@@ -1040,6 +1115,84 @@ export class AbyssScene extends Phaser.Scene {
    *  prompt should render for the current adjacent prop. */
   getAdjacentInteractableProp(): { kind: string; x: number; y: number } | null {
     return this.adjacentInteractableProp;
+  }
+
+  /** React toggles this when the cutscene controller takes over — for
+   *  the duration the scene ignores movement input + camera shakes. */
+  setCutsceneActive(active: boolean) {
+    this.cutsceneActive = active;
+    if (active) this.setPlayerAnimState("idle");
+  }
+
+  /** Mark an encounter as seen client-side so a same-session retrigger
+   *  can't fire before the server-confirmed RoomState arrives. */
+  markEncounterSeen(encounterId: string) {
+    this.localSeenEncounters.add(encounterId);
+  }
+
+  /** Spawn one cutscene mob at a starting tile, walk it toward a
+   *  target tile playing the walk animation in the chosen direction,
+   *  then settle on the south-facing idle. Returns a Promise that
+   *  resolves when the mob reaches its target. */
+  spawnCutsceneMob(opts: {
+    mobId: string;
+    fromTile: { x: number; y: number };
+    toTile: { x: number; y: number };
+    walkDir: Direction;
+    finalDir: Direction;
+    durationMs?: number;
+  }): Promise<Phaser.GameObjects.Sprite | null> {
+    const { mobId, fromTile, toTile, walkDir, finalDir } = opts;
+    const duration = opts.durationMs ?? 1400;
+    const key = `mob-${mobId}-${walkDir}`;
+    if (!this.textures.exists(key)) return Promise.resolve(null);
+    const startX = fromTile.x * RENDERED_TILE + RENDERED_TILE / 2;
+    const startY = fromTile.y * RENDERED_TILE + RENDERED_TILE / 2;
+    const targetX = toTile.x * RENDERED_TILE + RENDERED_TILE / 2;
+    const targetY = toTile.y * RENDERED_TILE + RENDERED_TILE / 2;
+    const sprite = this.add.sprite(startX, startY, key);
+    sprite.setScale(CHARACTER_SCALE).setOrigin(0.5, CHARACTER_ORIGIN_Y).setDepth(9);
+    this.roomDecor.push(sprite);
+    // Play walk animation if we have frames; otherwise just slide.
+    const animKey = `mob-${mobId}-walk-${walkDir}`;
+    if (this.anims.exists(animKey)) sprite.play(animKey);
+    return new Promise((resolve) => {
+      this.tweens.add({
+        targets: sprite,
+        x: targetX,
+        y: targetY,
+        duration,
+        ease: "Linear",
+        onComplete: () => {
+          // Switch to the final-direction static idle frame.
+          const finalKey = `mob-${mobId}-${finalDir}`;
+          if (this.textures.exists(finalKey)) {
+            sprite.anims.stop();
+            sprite.setTexture(finalKey);
+          }
+          resolve(sprite);
+        },
+      });
+    });
+  }
+
+  private tryEncounterTrigger() {
+    if (this.cutsceneActive) return;
+    for (const trig of this.encounterTriggers) {
+      if (this.localSeenEncounters.has(trig.encounterId)) continue;
+      if (
+        trig.tile.x !== this.playerTile.x ||
+        trig.tile.y !== this.playerTile.y
+      ) {
+        continue;
+      }
+      // Mark locally to suppress double-fire in case React doesn't
+      // get the RoomState refresh back before the next move.
+      this.localSeenEncounters.add(trig.encounterId);
+      this.cutsceneActive = true;
+      this.callbacks.onEncounterTriggered?.(trig.encounterId, trig.mobIds);
+      return; // one encounter per step
+    }
   }
 
   /** Called after every committed step. For each registered one-shot

@@ -8,11 +8,13 @@ import {
   equipItem,
   fetchRoom,
   interactWithProp,
+  startEncounter,
   moveCharacter,
   pickupGroundItem,
   unequipItem,
   type Direction,
   type EquippedSlot,
+  type EncounterMob,
   type InteractReward,
   type RoomNpc,
   type RoomState,
@@ -63,6 +65,14 @@ export default function PhaserExploration({
   const [interactPrompt, setInteractPrompt] = useState<{ kind: string; x: number; y: number } | null>(null);
   /** Brief toast shown after a successful chest open / loot grant. */
   const [rewardToast, setRewardToast] = useState<InteractReward | null>(null);
+  /** Phase 4a: when an encounter trigger fires we run a quick cutscene
+   *  (enemies walk in) then show the placeholder pre-combat modal
+   *  until the real combat scene ships. `null` = no cutscene running. */
+  const [encounterCutscene, setEncounterCutscene] = useState<{ encounterId: string; mobs: EncounterMob[] } | null>(null);
+  /** True once the cutscene walk-in finishes and we're showing the
+   *  fade-to-black + placeholder modal. Player taps "Continue" to
+   *  dismiss and return to exploration. */
+  const [showCombatPlaceholder, setShowCombatPlaceholder] = useState(false);
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   /** When true the inventory is open AND can't be closed (tutorial
    *  step equip_sword). Hides the X button and ignores ESC. */
@@ -137,6 +147,10 @@ export default function PhaserExploration({
           onPropInteract: (propKind: string, tileX: number, tileY: number) => {
             if (cancelled) return;
             void doInteract(propKind, tileX, tileY);
+          },
+          onEncounterTriggered: (encounterId: string, mobIds: string[]) => {
+            if (cancelled) return;
+            void doEncounterStart(encounterId, mobIds);
           },
         };
 
@@ -335,6 +349,81 @@ export default function PhaserExploration({
     } finally {
       setPendingItemId(null);
     }
+  }
+
+  async function doEncounterStart(encounterId: string, mobIds: string[]) {
+    void mobIds; // Server resolves mob_ids from the prop metadata for
+    //              anti-cheat; the scene-side list is just a hint.
+    try {
+      const resp = await startEncounter({
+        initData,
+        characterId,
+        encounterId,
+        locale,
+      });
+      stateRef.current = resp.room_state;
+      setState(resp.room_state);
+      setEncounterCutscene({ encounterId, mobs: resp.mobs });
+
+      // Drive the cutscene: enemies emerge from the room's south
+      // door tile (player came from the north), walk north to one
+      // tile in front of the player, settle on south-facing idle.
+      const scene = sceneRef.current as {
+        spawnCutsceneMob?: (opts: {
+          mobId: string;
+          fromTile: { x: number; y: number };
+          toTile: { x: number; y: number };
+          walkDir: Direction;
+          finalDir: Direction;
+          durationMs?: number;
+        }) => Promise<unknown>;
+        markEncounterSeen?: (id: string) => void;
+      } | null;
+      scene?.markEncounterSeen?.(encounterId);
+
+      // Hard-coded layout for the bridge ambush: south door (6, 10),
+      // line the mobs up one tile in front of the player on the
+      // south side (player's at the trigger tile 6, 8 → mobs land
+      // at y=9, one each side of the column). Future encounters can
+      // declare these positions in metadata.
+      const targets = [
+        { x: 5, y: 9 },
+        { x: 7, y: 9 },
+      ];
+      const fromTile = { x: 6, y: 10 };
+      const walks = resp.mobs.slice(0, 2).map((m, i) =>
+        scene?.spawnCutsceneMob?.({
+          mobId: m.id,
+          fromTile,
+          toTile: targets[i] ?? fromTile,
+          walkDir: "north",
+          finalDir: "north",
+          durationMs: 1600,
+        }) ?? Promise.resolve(null),
+      );
+      await Promise.all(walks);
+      // Beat of stillness, then fade overlay + placeholder modal.
+      window.setTimeout(() => setShowCombatPlaceholder(true), 350);
+    } catch (err) {
+      const scene = sceneRef.current as { setCutsceneActive?: (a: boolean) => void } | null;
+      scene?.setCutsceneActive?.(false);
+      setEncounterCutscene(null);
+      setError(humanize(err, locale));
+    }
+  }
+
+  function dismissCombatPlaceholder() {
+    setShowCombatPlaceholder(false);
+    setEncounterCutscene(null);
+    const scene = sceneRef.current as {
+      setCutsceneActive?: (a: boolean) => void;
+      loadRoom?: (s: RoomState) => void;
+    } | null;
+    scene?.setCutsceneActive?.(false);
+    // Rebuild the room so the mob sprites we added during the
+    // cutscene get torn down. The same-room loadRoom preserves the
+    // player position thanks to the door-return fix.
+    if (stateRef.current) scene?.loadRoom?.(stateRef.current);
   }
 
   async function doInteract(propKind: string, tileX: number, tileY: number) {
@@ -628,6 +717,41 @@ export default function PhaserExploration({
             <p className="text-sm font-semibold text-amber-200">
               {t(locale, rewardToast.message_key)}
             </p>
+          </div>
+        ) : null}
+
+        {/* Pre-combat fade overlay — drops in over the canvas once
+            the cutscene walk-in is queued so the enemy entrance reads
+            as "the world dims around them". The placeholder modal
+            on top is Phase 4a's stand-in for the real combat scene. */}
+        {encounterCutscene ? (
+          <div
+            className={
+              "pointer-events-none absolute inset-0 z-30 bg-black transition-opacity duration-700 " +
+              (showCombatPlaceholder ? "opacity-95" : "opacity-30")
+            }
+          />
+        ) : null}
+        {showCombatPlaceholder && encounterCutscene ? (
+          <div className="absolute inset-0 z-40 flex items-center justify-center p-6">
+            <div className="w-full max-w-sm rounded-lg border-2 border-abyss-ember bg-abyss-deep/95 p-5 text-center shadow-2xl backdrop-blur">
+              <p className="text-xs uppercase tracking-widest text-abyss-ember">
+                {t(locale, "combat.encounter_title")}
+              </p>
+              <p className="mt-2 text-lg font-bold text-white">
+                {encounterCutscene.mobs.map((m) => m.name_localized).join(" · ")}
+              </p>
+              <p className="mt-3 text-xs text-abyss-fog">
+                {t(locale, "combat.placeholder_message")}
+              </p>
+              <button
+                type="button"
+                onClick={dismissCombatPlaceholder}
+                className="mt-4 w-full rounded bg-abyss-ember/90 px-3 py-2 text-xs font-bold uppercase tracking-widest text-abyss-void hover:bg-abyss-ember"
+              >
+                {t(locale, "combat.placeholder_continue")}
+              </button>
+            </div>
           </div>
         ) : null}
 
