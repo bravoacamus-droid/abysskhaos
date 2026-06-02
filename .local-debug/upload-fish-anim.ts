@@ -18,8 +18,8 @@ loadEnv({ path: ".env.local" });
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 const FISH_BASE_ID = "a4fc30e1-3a2c-4941-bc74-e858e2c22801";
-const FISH_ANIM_GROUP = "dc456563-1a27-4409-815e-bc79496961ed";
-const FISH_FRAME_COUNT = 8;
+const FISH_ANIM_GROUP = "29b39430-2d09-4100-9b7b-47aaf569b763";
+const FISH_FRAME_COUNT = 9;
 const FISH_FRAMERATE = 10;
 const BUCKET = "https://backblaze.pixellab.ai/file/pixellab-characters/objects/8d5dc016-f9f1-4d60-b597-face41b54459";
 
