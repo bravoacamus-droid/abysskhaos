@@ -16,7 +16,7 @@
  * gameplay advantage because the server always wins the next
  * combat-affecting interaction.
  */
-import type { CharacterItem, EquippedSlot, RoomState } from "./api";
+import type { CharacterItem, EquippedSlot, InteractReward, RoomState } from "./api";
 
 const TOTAL_INVENTORY_SLOTS = 40;
 
@@ -194,5 +194,91 @@ export function optimisticUnequip(
     equipped: state.equipped.filter((i) => i.id !== characterItemId),
     inventory: [...state.inventory, { ...eq, slot: free }],
     player: applyBonusDelta(state.player, bonuses, -1),
+  };
+}
+
+/**
+ * Predicts the server's new RoomState + reward after opening a chest
+ * (or any prop with metadata.interact = { kind: 'loot', items: [...] }).
+ *
+ * Mirrors /api/v1/characters/:id/interact:
+ *   - composite key `${room_id}:${prop_kind}:${x}:${y}` appended to
+ *     player.opened_props (the scene reads this to swap the chest
+ *     sprite to the opened variant + suppress the Z prompt).
+ *   - listed items added to inventory: stack into the existing row
+ *     for the same item_id if one is in inventory, else into the
+ *     first free slot.
+ *
+ * Returns null if the prediction can't be made cleanly (prop missing,
+ * not interactable, already opened, or inventory full).
+ */
+export function optimisticInteract(
+  state: RoomState,
+  propKind: string,
+  tileX: number,
+  tileY: number,
+): { state: RoomState; reward: InteractReward } | null {
+  const prop = state.props.find(
+    (p) => p.kind === propKind && p.x === tileX && p.y === tileY,
+  );
+  if (!prop) return null;
+  const interact = (prop.metadata as { interact?: unknown } | null)?.interact as
+    | { kind?: string; items?: Array<{ item_id: string; quantity?: number }>; message_key?: string }
+    | undefined;
+  if (!interact || interact.kind !== "loot") return null;
+  const items = interact.items ?? [];
+  if (items.length === 0) return null;
+
+  const propKey = `${state.room.id}:${propKind}:${tileX}:${tileY}`;
+  if ((state.player.opened_props ?? []).includes(propKey)) return null;
+
+  // Stack-or-place into inventory. Strict mirror of the pickup +
+  // /interact server logic so the predicted slots line up with what
+  // the server returns; mismatched slot numbers would jiggle the
+  // inventory grid when the server response replaces state.
+  let nextInventory: CharacterItem[] = state.inventory;
+  for (const grant of items) {
+    const qty = grant.quantity ?? 1;
+    const existingIdx = nextInventory.findIndex(
+      (i) => i.item_id === grant.item_id && typeof i.slot === "number",
+    );
+    if (existingIdx !== -1) {
+      const existing = nextInventory[existingIdx];
+      nextInventory = nextInventory.map((i, idx) =>
+        idx === existingIdx ? { ...i, quantity: i.quantity + qty } : i,
+      );
+      void existing;
+    } else {
+      const free = firstFreeInventorySlot(nextInventory);
+      if (free === -1) return null;
+      // Temporary client id; the server's UUID lands when the real
+      // RoomState arrives and replaces this row in setState.
+      nextInventory = [
+        ...nextInventory,
+        {
+          id: `optimistic-${propKey}-${grant.item_id}`,
+          item_id: grant.item_id,
+          slot: free,
+          quantity: qty,
+          durability: null,
+          metadata: {},
+        },
+      ];
+    }
+  }
+
+  return {
+    state: {
+      ...state,
+      inventory: nextInventory,
+      player: {
+        ...state.player,
+        opened_props: [...(state.player.opened_props ?? []), propKey],
+      },
+    },
+    reward: {
+      message_key: interact.message_key ?? "interact.reward_generic",
+      items,
+    },
   };
 }

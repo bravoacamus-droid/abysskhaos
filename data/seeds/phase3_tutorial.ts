@@ -212,13 +212,13 @@ const TILEMAPS: Record<string, TilemapData> = {
       // north (spawn area is top of map). Sits centre-back so it's
       // visible from spawn without blocking the path to the bridge.
       { kind: "treasure_chest_copper", x: 2, y: 2 },
-      // Fish-jump one-shot ambient: scene renders it lying invisible
-      // by default, then plays once when the player first steps onto
-      // the bridge tile (6, 5). Placed at the river tile directly
-      // west of the bridge so the leap reads as "fish jumping next
-      // to the player's feet". prop.metadata.one_shot_on_step =
-      // { x: 6, y: 5 } drives the trigger.
-      { kind: "river_fish_jump", x: 5, y: 5 },
+      // Fish-jump one-shot ambient. Stays invisible until the player
+      // steps onto the bridge tile (6, 5), then plays the PixelLab
+      // leap once. Sitting at (3, 5) — three river tiles to the LEFT
+      // of the bridge so the fish + bridge silhouettes never overlap
+      // (user feedback: at (5,5) the fish read like it was on the
+      // bridge planks rather than out in the river).
+      { kind: "river_fish_jump", x: 3, y: 5 },
     ],
   },
   // The Guardian's Chamber — boss room. The white dragon dominates the

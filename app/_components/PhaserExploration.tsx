@@ -19,7 +19,7 @@ import {
   type TutorialStep,
 } from "@/lib/client/api";
 import { t, type Locale } from "@/lib/i18n";
-import { optimisticEquip, optimisticUnequip } from "@/lib/client/optimistic";
+import { optimisticEquip, optimisticInteract, optimisticUnequip } from "@/lib/client/optimistic";
 
 import DialogueModal from "./DialogueModal";
 import { TutorialHint } from "./TutorialHint";
@@ -338,6 +338,22 @@ export default function PhaserExploration({
   }
 
   async function doInteract(propKind: string, tileX: number, tileY: number) {
+    const snapshot = stateRef.current;
+    if (!snapshot) return;
+    // Optimistic: predict the chest opening + the loot landing in
+    // inventory, swap the sprite + show the toast IMMEDIATELY. The
+    // server confirms in the background; if it rejects we roll back.
+    // User reported the interact felt sluggish — this kills the
+    // round-trip wait the same way equip/unequip handle it.
+    const predicted = optimisticInteract(snapshot, propKind, tileX, tileY);
+    const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
+    if (predicted) {
+      stateRef.current = predicted.state;
+      setState(predicted.state);
+      scene?.loadRoom?.(predicted.state);
+      setRewardToast(predicted.reward);
+      window.setTimeout(() => setRewardToast(null), 3000);
+    }
     try {
       const resp = await interactWithProp({
         initData,
@@ -347,14 +363,28 @@ export default function PhaserExploration({
         tileY,
         locale,
       });
+      // Server returns the authoritative state — swap it in. We
+      // DON'T re-load the scene when a prediction already ran;
+      // the predicted shape matches the server output (same
+      // opened_props key, same inventory stacks) so a second
+      // loadRoom would just tear down + rebuild the same sprites
+      // and risk flicker.
       stateRef.current = resp.room_state;
       setState(resp.room_state);
-      const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
-      scene?.loadRoom?.(resp.room_state);
-      setRewardToast(resp.reward);
-      // Auto-dismiss the toast after ~3s so it doesn't linger.
-      window.setTimeout(() => setRewardToast(null), 3000);
+      if (!predicted) {
+        scene?.loadRoom?.(resp.room_state);
+        setRewardToast(resp.reward);
+        window.setTimeout(() => setRewardToast(null), 3000);
+      }
     } catch (err) {
+      // Server rejected (e.g. PROP_ALREADY_OPENED if some prior
+      // request snuck in) — undo the optimistic preview.
+      if (predicted) {
+        stateRef.current = snapshot;
+        setState(snapshot);
+        scene?.loadRoom?.(snapshot);
+        setRewardToast(null);
+      }
       setError(humanize(err, locale));
     }
   }
