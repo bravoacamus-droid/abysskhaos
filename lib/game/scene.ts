@@ -142,6 +142,17 @@ export class AbyssScene extends Phaser.Scene {
    *  contains an `interact` block. Same adjacency rule as ground
    *  items (own tile + 4 neighbours). */
   private adjacentInteractableProp: { kind: string; x: number; y: number } | null = null;
+  /** One-shot ambient triggers — props whose metadata declares
+   *  `one_shot_on_step: { x, y }` stay invisible until the player
+   *  steps onto the named tile, then play their animation once
+   *  and hide again. Cleared on every room rebuild (re-entering
+   *  the room plays them again). */
+  private oneShotTriggers: Array<{
+    sprite: Phaser.GameObjects.Sprite;
+    animKey: string | null;
+    stepTile: { x: number; y: number };
+    played: boolean;
+  }> = [];
 
   constructor() {
     super(AbyssScene.KEY);
@@ -423,6 +434,9 @@ export class AbyssScene extends Phaser.Scene {
       obj.destroy();
     }
     this.roomDecor = [];
+    // Wipe one-shot trigger state too — re-entering a room should
+    // play the fish jump (etc.) again.
+    this.oneShotTriggers = [];
     if (this.tilemap) {
       this.tilemap.destroy();
       this.tilemap = undefined;
@@ -598,6 +612,10 @@ export class AbyssScene extends Phaser.Scene {
       const cy = prop.y * RENDERED_TILE + RENDERED_TILE / 2;
       const animFrames = prop.metadata?.animation_frames as string[] | undefined;
       const animFramerate = (prop.metadata?.animation_framerate as number | undefined) ?? 6;
+      // Ambient one-shots stay invisible until the player steps on
+      // the trigger tile, then play once. The fish-jump-on-bridge in
+      // r02 is the canonical case.
+      const oneShotStep = prop.metadata?.one_shot_on_step as { x: number; y: number } | undefined;
       // Use Sprite (not Image) when we have animation frames so we can
       // play Phaser.Animation; Image is fine for static decor.
       const useSprite = !!animFrames;
@@ -621,6 +639,9 @@ export class AbyssScene extends Phaser.Scene {
       }
       if (useSprite && animFrames) {
         const animKey = `prop-anim-${prop.kind}`;
+        // One-shot animations are NON-LOOPING; everything else loops
+        // forever (river ripple, torch flicker, dragon idle).
+        const repeat = oneShotStep ? 0 : -1;
         if (!this.anims.exists(animKey)) {
           const frameRefs = animFrames
             .map((_, i) => ({ key: `${key}-anim-${i}` }))
@@ -630,11 +651,21 @@ export class AbyssScene extends Phaser.Scene {
               key: animKey,
               frames: frameRefs,
               frameRate: animFramerate,
-              repeat: -1,
+              repeat,
             });
           }
         }
-        if (this.anims.exists(animKey)) {
+        if (oneShotStep) {
+          // Hide until player steps on the trigger tile; tryOneShotTriggers
+          // (called from attemptMove) will show + play + auto-hide.
+          (obj as Phaser.GameObjects.Sprite).setVisible(false);
+          this.oneShotTriggers.push({
+            sprite: obj as Phaser.GameObjects.Sprite,
+            animKey: this.anims.exists(animKey) ? animKey : null,
+            stepTile: { x: oneShotStep.x, y: oneShotStep.y },
+            played: false,
+          });
+        } else if (this.anims.exists(animKey)) {
           (obj as Phaser.GameObjects.Sprite).play(animKey);
         }
       }
@@ -858,6 +889,7 @@ export class AbyssScene extends Phaser.Scene {
     this.setPlayerAnimState("walk");
     this.checkNpcAdjacency();
     this.checkGroundAdjacency();
+    this.tryOneShotTriggers();
 
     // Did we land on an exit tile? If so, fire the transition trigger.
     // React-side doMove awaits at least MOVE_TWEEN_MS before calling
@@ -941,5 +973,62 @@ export class AbyssScene extends Phaser.Scene {
    *  prompt should render for the current adjacent prop. */
   getAdjacentInteractableProp(): { kind: string; x: number; y: number } | null {
     return this.adjacentInteractableProp;
+  }
+
+  /** Called after every committed step. For each registered one-shot
+   *  ambient trigger whose stepTile matches the player's new tile,
+   *  show + play its animation once, then hide on completion.
+   *  Marked `played` so re-stepping on the same tile within the same
+   *  visit doesn't re-fire it (only re-entering the room resets). */
+  private tryOneShotTriggers() {
+    for (const trig of this.oneShotTriggers) {
+      if (trig.played) continue;
+      if (trig.stepTile.x !== this.playerTile.x || trig.stepTile.y !== this.playerTile.y) {
+        continue;
+      }
+      trig.played = true;
+      trig.sprite.setVisible(true);
+      if (trig.animKey) {
+        // Phaser fires 'animationcomplete' once because repeat=0.
+        trig.sprite.once("animationcomplete", () => {
+          trig.sprite.setVisible(false);
+        });
+        trig.sprite.play(trig.animKey);
+      } else {
+        // No animation frames registered — fake a leap: jump up
+        // (scale + y) while fading in, peak, then drop + fade out.
+        // Reads as a fish breaching the surface and falling back.
+        const baseY = trig.sprite.y;
+        const baseScale = trig.sprite.scaleX;
+        trig.sprite.setAlpha(0).setScale(baseScale * 0.7);
+        this.tweens.add({
+          targets: trig.sprite,
+          y: { from: baseY + 8, to: baseY - 20 },
+          scaleX: { from: baseScale * 0.7, to: baseScale * 1.05 },
+          scaleY: { from: baseScale * 0.7, to: baseScale * 1.05 },
+          alpha: { from: 0, to: 1 },
+          duration: 380,
+          ease: "Quad.easeOut",
+          onComplete: () => {
+            this.tweens.add({
+              targets: trig.sprite,
+              y: baseY + 8,
+              scaleX: baseScale * 0.65,
+              scaleY: baseScale * 0.65,
+              alpha: 0,
+              duration: 320,
+              ease: "Quad.easeIn",
+              onComplete: () => {
+                trig.sprite.setVisible(false);
+                // Reset for hygiene — if the trigger ever re-fires
+                // (it won't this visit because `played=true`, but be
+                // defensive) the sprite starts from a known state.
+                trig.sprite.setY(baseY).setScale(baseScale).setAlpha(1);
+              },
+            });
+          },
+        });
+      }
+    }
   }
 }

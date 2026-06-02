@@ -67,34 +67,15 @@ const ROOMS = [
         "Una vasta caverna bañada en una luz blanca fría. Un colosal dragón blanco observa en silencio, y a su lado un portal hyperdimensional vibra con el laberinto más allá.",
     },
   },
-  {
-    slug: "f100_r04",
-    floor_number: 100,
-    room_index: 4,
-    name: "Cedric's Cache",
-    description:
-      "A side alcove east of Cedric's grotto, half-forgotten between two trees. A small copper chest sits open-handed to any who happen by — a quiet generosity from the broken smith.",
-    room_type: "item",
-    is_safe: true,
-    biome_id: "threshold",
-    es: {
-      name: "Alacena de Cedric",
-      description:
-        "Una alcoba lateral al este de la gruta de Cedric, medio olvidada entre dos árboles. Un pequeño cofre de cobre permanece abierto a quien pase — una callada generosidad del herrero roto.",
-    },
-  },
 ] as const;
 
-// Linear cave tutorial: entrance ↔ river ↔ guardian, with a side
-// alcove (r04) east of r01 containing the copper chest tutorial.
+// Linear cave tutorial: entrance ↔ river ↔ guardian.
 type Direction = "north" | "south" | "east" | "west";
 const CONNECTIONS: Array<{ fromSlug: string; toSlug: string; direction: Direction }> = [
   { fromSlug: "f100_r01", toSlug: "f100_r02", direction: "south" },
   { fromSlug: "f100_r02", toSlug: "f100_r01", direction: "north" },
   { fromSlug: "f100_r02", toSlug: "f100_r03", direction: "south" },
   { fromSlug: "f100_r03", toSlug: "f100_r02", direction: "north" },
-  { fromSlug: "f100_r01", toSlug: "f100_r04", direction: "east"  },
-  { fromSlug: "f100_r04", toSlug: "f100_r01", direction: "west"  },
 ];
 
 // -----------------------------------------------------------------------------
@@ -127,9 +108,7 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "#...........#",
       "#...........#",
-      "#............", // east exit at (12, 5) — single-tile opening on
-      // the rightmost column so the arch sprite reads carved-in. Player
-      // walks east through it into r04 (Cedric's Cache).
+      "#...........#",
       "#...........#",
       "#...........#",
       "#...........#",
@@ -139,7 +118,7 @@ const TILEMAPS: Record<string, TilemapData> = {
       // hovering in a 3-tile-wide opening with grass visible around it.
     ],
     spawn: { x: 6, y: 9 },
-    exits: { south: { x: 6, y: 10 }, east: { x: 12, y: 5 } },
+    exits: { south: { x: 6, y: 10 } },
     props: [
       // Left tree stays cave_tree; right tree uses cave_tree_large for
       // a matching but slightly bigger silhouette.
@@ -228,8 +207,18 @@ const TILEMAPS: Record<string, TilemapData> = {
       { kind: "cave_river", x: 10, y: 5 },
       { kind: "cave_river", x: 11, y: 5 },
       { kind: "cave_bridge_stone", x: 6, y: 5 },
-      { kind: "cave_tree", x: 2, y: 2 },
       { kind: "cave_tree", x: 10, y: 8 },
+      // Copper chest on the player's LEFT as they enter from the
+      // north (spawn area is top of map). Sits centre-back so it's
+      // visible from spawn without blocking the path to the bridge.
+      { kind: "treasure_chest_copper", x: 2, y: 2 },
+      // Fish-jump one-shot ambient: scene renders it lying invisible
+      // by default, then plays once when the player first steps onto
+      // the bridge tile (6, 5). Placed at the river tile directly
+      // west of the bridge so the leap reads as "fish jumping next
+      // to the player's feet". prop.metadata.one_shot_on_step =
+      // { x: 6, y: 5 } drives the trigger.
+      { kind: "river_fish_jump", x: 5, y: 5 },
     ],
   },
   // The Guardian's Chamber — boss room. The white dragon dominates the
