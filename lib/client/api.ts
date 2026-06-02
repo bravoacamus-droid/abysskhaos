@@ -474,6 +474,32 @@ export function unequipItem(
   });
 }
 
+export type InteractReward = {
+  message_key: string;
+  items: Array<{ item_id: string; quantity?: number }>;
+};
+
+export function interactWithProp(
+  opts: FetchOpts & {
+    characterId: string;
+    propKind: string;
+    tileX: number;
+    tileY: number;
+    locale: string;
+  },
+): Promise<{ room_state: RoomState; reward: InteractReward }> {
+  return call(`/api/v1/characters/${opts.characterId}/interact`, "POST", {
+    initData: opts.initData,
+    body: {
+      prop_kind: opts.propKind,
+      tile_x: opts.tileX,
+      tile_y: opts.tileY,
+      locale: opts.locale,
+    },
+    signal: opts.signal,
+  });
+}
+
 /** DEV ONLY — wipes tutorial state so the sequence can be retested on
  *  every app open. Will be removed once the tutorial flow is locked. */
 export function devResetTutorial(

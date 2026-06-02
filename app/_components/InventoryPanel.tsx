@@ -329,10 +329,11 @@ function CharacterCard({ state, locale }: { state: RoomState; locale: Locale }) 
           <span className="text-3xl text-abyss-fog">?</span>
         )}
         {mainHandIcon ? (
-          // Pinned bottom-right; uses the slot frame to read as an
-          // "equipped" badge rather than a stray sprite.
+          // Pinned bottom-LEFT — reads as the warrior's drawn weapon
+          // hand (most warriors are sword-on-the-left in 2D refs).
+          // Uses the slot frame so it's clearly an "equipped" badge.
           <div
-            className="absolute bottom-1 right-1 h-10 w-10"
+            className="absolute bottom-1 left-1 h-10 w-10"
             style={{
               backgroundImage: `url(${SLOT_FRAME_URL})`,
               backgroundSize: "100% 100%",

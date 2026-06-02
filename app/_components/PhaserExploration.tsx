@@ -7,11 +7,13 @@ import {
   devResetTutorial,
   equipItem,
   fetchRoom,
+  interactWithProp,
   moveCharacter,
   pickupGroundItem,
   unequipItem,
   type Direction,
   type EquippedSlot,
+  type InteractReward,
   type RoomNpc,
   type RoomState,
   type TutorialStep,
@@ -56,6 +58,11 @@ export default function PhaserExploration({
   const [moving, setMoving] = useState(false);
   const [showInventory, setShowInventory] = useState(false);
   const [showPickupPrompt, setShowPickupPrompt] = useState(false);
+  /** When non-null the Z HUD prompt is the "open chest / interact" one
+   *  instead of the ground-item one — text changes accordingly. */
+  const [interactPrompt, setInteractPrompt] = useState<{ kind: string; x: number; y: number } | null>(null);
+  /** Brief toast shown after a successful chest open / loot grant. */
+  const [rewardToast, setRewardToast] = useState<InteractReward | null>(null);
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   /** When true the inventory is open AND can't be closed (tutorial
    *  step equip_sword). Hides the X button and ignores ESC. */
@@ -126,6 +133,10 @@ export default function PhaserExploration({
           onGroundItemPickup: (groundItemId: string) => {
             if (cancelled) return;
             void doPickup(groundItemId);
+          },
+          onPropInteract: (propKind: string, tileX: number, tileY: number) => {
+            if (cancelled) return;
+            void doInteract(propKind, tileX, tileY);
           },
         };
 
@@ -326,6 +337,28 @@ export default function PhaserExploration({
     }
   }
 
+  async function doInteract(propKind: string, tileX: number, tileY: number) {
+    try {
+      const resp = await interactWithProp({
+        initData,
+        characterId,
+        propKind,
+        tileX,
+        tileY,
+        locale,
+      });
+      stateRef.current = resp.room_state;
+      setState(resp.room_state);
+      const scene = sceneRef.current as { loadRoom?: (s: RoomState) => void } | null;
+      scene?.loadRoom?.(resp.room_state);
+      setRewardToast(resp.reward);
+      // Auto-dismiss the toast after ~3s so it doesn't linger.
+      window.setTimeout(() => setRewardToast(null), 3000);
+    } catch (err) {
+      setError(humanize(err, locale));
+    }
+  }
+
   async function doUnequip(characterItemId: string) {
     const snapshot = stateRef.current;
     if (!snapshot) return;
@@ -376,15 +409,20 @@ export default function PhaserExploration({
     if (inventoryForced) setShowInventory(true);
   }, [inventoryForced]);
 
-  // Show / hide the floor "Z to pick up" prompt based on adjacency.
-  // Polled because Phaser's adjacency calc happens inside attemptMove,
-  // not as a React event. A short interval is cheap.
+  // Show / hide the floor "Z to pick up" + chest "Z to open" prompts.
+  // Polled at 150ms because Phaser updates adjacency inside attemptMove,
+  // not as a React event. Ground pickup wins precedence over interact
+  // (same priority the scene uses for the Z handler) so the UI label
+  // never disagrees with the action that will fire.
   useEffect(() => {
     const interval = window.setInterval(() => {
       const scene = sceneRef.current as {
         getAdjacentGroundItemId?: () => string | null;
+        getAdjacentInteractableProp?: () => { kind: string; x: number; y: number } | null;
       } | null;
-      setShowPickupPrompt(!!scene?.getAdjacentGroundItemId?.());
+      const ground = !!scene?.getAdjacentGroundItemId?.();
+      setShowPickupPrompt(ground);
+      setInteractPrompt(ground ? null : scene?.getAdjacentInteractableProp?.() ?? null);
     }, 150);
     return () => window.clearInterval(interval);
   }, []);
@@ -528,6 +566,39 @@ export default function PhaserExploration({
               {t(locale, "tutorial.pickup_prompt")}
             </span>
           </button>
+        ) : null}
+
+        {/* "Z to open chest" prompt — same shape as the pickup prompt
+            but a different label, only shown when no ground item is
+            available (ground takes priority in the scene's Z handler). */}
+        {interactPrompt ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (interactPrompt) {
+                void doInteract(interactPrompt.kind, interactPrompt.x, interactPrompt.y);
+              }
+            }}
+            className="absolute bottom-44 left-1/2 z-40 -translate-x-1/2 flex items-center gap-2 rounded-lg border-2 border-amber-400 bg-abyss-deep/95 px-4 py-2 shadow-2xl backdrop-blur hover:bg-abyss-coal/60 active:scale-95 transition animate-pulse"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded border border-amber-400/80 bg-abyss-void text-base font-bold text-amber-300">
+              Z
+            </span>
+            <span className="text-sm font-semibold text-white">
+              {t(locale, "interact.open_prompt")}
+            </span>
+          </button>
+        ) : null}
+
+        {/* Reward toast — slides in for ~3s after a successful chest
+            open. Uses the message_key the server returned so the copy
+            stays i18n-driven and the server controls flavour. */}
+        {rewardToast ? (
+          <div className="absolute left-1/2 top-20 z-40 -translate-x-1/2 rounded-lg border-2 border-amber-400 bg-abyss-deep/95 px-4 py-2 text-center shadow-2xl backdrop-blur">
+            <p className="text-sm font-semibold text-amber-200">
+              {t(locale, rewardToast.message_key)}
+            </p>
+          </div>
         ) : null}
 
         {error ? (

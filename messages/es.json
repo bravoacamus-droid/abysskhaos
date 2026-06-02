@@ -90,6 +90,11 @@
     "dialogue_close": "Terminar",
     "talk_prompt": "Toca para hablar"
   },
+  "interact": {
+    "open_prompt": "Z para abrir",
+    "chest_potions_x2": "¡Obtuviste 2 pociones menores de vida! (cada una cura 50 PV)",
+    "reward_generic": "Encontraste algo nuevo."
+  },
   "tutorial": {
     "step": {
       "walk_to_cedric": "Sube hasta Cedric",

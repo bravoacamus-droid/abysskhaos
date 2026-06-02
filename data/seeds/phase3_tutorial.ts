@@ -67,15 +67,34 @@ const ROOMS = [
         "Una vasta caverna bañada en una luz blanca fría. Un colosal dragón blanco observa en silencio, y a su lado un portal hyperdimensional vibra con el laberinto más allá.",
     },
   },
+  {
+    slug: "f100_r04",
+    floor_number: 100,
+    room_index: 4,
+    name: "Cedric's Cache",
+    description:
+      "A side alcove east of Cedric's grotto, half-forgotten between two trees. A small copper chest sits open-handed to any who happen by — a quiet generosity from the broken smith.",
+    room_type: "item",
+    is_safe: true,
+    biome_id: "threshold",
+    es: {
+      name: "Alacena de Cedric",
+      description:
+        "Una alcoba lateral al este de la gruta de Cedric, medio olvidada entre dos árboles. Un pequeño cofre de cobre permanece abierto a quien pase — una callada generosidad del herrero roto.",
+    },
+  },
 ] as const;
 
-// Linear cave tutorial: entrance ↔ river ↔ guardian. Only 3 rooms now.
+// Linear cave tutorial: entrance ↔ river ↔ guardian, with a side
+// alcove (r04) east of r01 containing the copper chest tutorial.
 type Direction = "north" | "south" | "east" | "west";
 const CONNECTIONS: Array<{ fromSlug: string; toSlug: string; direction: Direction }> = [
   { fromSlug: "f100_r01", toSlug: "f100_r02", direction: "south" },
   { fromSlug: "f100_r02", toSlug: "f100_r01", direction: "north" },
   { fromSlug: "f100_r02", toSlug: "f100_r03", direction: "south" },
   { fromSlug: "f100_r03", toSlug: "f100_r02", direction: "north" },
+  { fromSlug: "f100_r01", toSlug: "f100_r04", direction: "east"  },
+  { fromSlug: "f100_r04", toSlug: "f100_r01", direction: "west"  },
 ];
 
 // -----------------------------------------------------------------------------
@@ -108,7 +127,9 @@ const TILEMAPS: Record<string, TilemapData> = {
       "#...........#",
       "#...........#",
       "#...........#",
-      "#...........#",
+      "#............", // east exit at (12, 5) — single-tile opening on
+      // the rightmost column so the arch sprite reads carved-in. Player
+      // walks east through it into r04 (Cedric's Cache).
       "#...........#",
       "#...........#",
       "#...........#",
@@ -118,7 +139,7 @@ const TILEMAPS: Record<string, TilemapData> = {
       // hovering in a 3-tile-wide opening with grass visible around it.
     ],
     spawn: { x: 6, y: 9 },
-    exits: { south: { x: 6, y: 10 } },
+    exits: { south: { x: 6, y: 10 }, east: { x: 12, y: 5 } },
     props: [
       // Left tree stays cave_tree; right tree uses cave_tree_large for
       // a matching but slightly bigger silhouette.
@@ -237,6 +258,36 @@ const TILEMAPS: Record<string, TilemapData> = {
       // collision=true keeps the player from walking into it.
       { kind: "cave_dragon_white", x: 6, y: 4 },
       { kind: "portal_hyperdimensional", x: 9, y: 7 },
+    ],
+  },
+  // Cedric's Cache — small alcove east of r01. The copper chest sits
+  // centre-back; player enters from the west door at (0, 5) and walks
+  // up to it. Two trees flank the chest for visual framing. The chest
+  // prop carries metadata.interact = { kind: 'loot', items: [...] }
+  // so /interact grants the listed items every time it's opened
+  // (no per-character state stored — repeats by design).
+  f100_r04: {
+    width: 11,
+    height: 9,
+    tiles: [
+      "###########",
+      "#.........#",
+      "#.........#",
+      "#.........#",
+      "#.........#",
+      "..........#", // west exit at (0, 5) — opens back to r01
+      "#.........#",
+      "#.........#",
+      "###########",
+    ],
+    spawn: { x: 1, y: 5 },
+    exits: { west: { x: 0, y: 5 } },
+    props: [
+      { kind: "treasure_chest_copper", x: 5, y: 3 },
+      { kind: "cave_tree", x: 3, y: 2 },
+      { kind: "cave_tree", x: 7, y: 2 },
+      { kind: "cave_mushroom_cluster", x: 2, y: 7 },
+      { kind: "cave_mushroom_cluster", x: 8, y: 7 },
     ],
   },
 };

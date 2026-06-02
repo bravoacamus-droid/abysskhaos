@@ -90,6 +90,11 @@
     "dialogue_close": "End",
     "talk_prompt": "Tap to speak"
   },
+  "interact": {
+    "open_prompt": "Z to open",
+    "chest_potions_x2": "You found 2 minor health potions! (each heals 50 HP)",
+    "reward_generic": "You found something new."
+  },
   "tutorial": {
     "step": {
       "walk_to_cedric": "Walk up to Cedric",

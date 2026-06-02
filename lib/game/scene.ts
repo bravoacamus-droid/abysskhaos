@@ -98,6 +98,10 @@ export type SceneCallbacks = {
    *  to a ground item. Passes the room_ground_items.id; React handles
    *  the /pickup API call. */
   onGroundItemPickup?: (groundItemId: string) => void;
+  /** Fired when Z is pressed AND the player is adjacent to a prop
+   *  whose metadata declares it interactable (chests, levers, …).
+   *  React calls /interact with the prop kind + tile coordinates. */
+  onPropInteract?: (propKind: string, tileX: number, tileY: number) => void;
 };
 
 export type SceneInitData = { state: RoomState; callbacks?: SceneCallbacks };
@@ -133,6 +137,11 @@ export class AbyssScene extends Phaser.Scene {
    *  (the player is standing on or directly adjacent to). null = no
    *  pickup available right now. */
   private adjacentGroundItemId: string | null = null;
+  /** Interactable prop (chest, lever, …) the player can currently
+   *  trigger with Z. Detected by scanning `props` whose metadata
+   *  contains an `interact` block. Same adjacency rule as ground
+   *  items (own tile + 4 neighbours). */
+  private adjacentInteractableProp: { kind: string; x: number; y: number } | null = null;
 
   constructor() {
     super(AbyssScene.KEY);
@@ -428,12 +437,19 @@ export class AbyssScene extends Phaser.Scene {
     this.zKey.on("down", () => this.tryGroundPickup());
   }
 
-  /** Called by the Z key handler. If the player is currently adjacent
-   *  to a ground item, fire the React callback (which makes the
-   *  /pickup API call). */
+  /** Called by the Z key handler. Ground items win when both a ground
+   *  pickup AND a prop interact are available — picking up loose loot
+   *  feels more urgent than opening a chest you can return to.
+   *  Otherwise fire the interact callback for the adjacent prop. */
   private tryGroundPickup() {
-    if (!this.adjacentGroundItemId) return;
-    this.callbacks.onGroundItemPickup?.(this.adjacentGroundItemId);
+    if (this.adjacentGroundItemId) {
+      this.callbacks.onGroundItemPickup?.(this.adjacentGroundItemId);
+      return;
+    }
+    if (this.adjacentInteractableProp) {
+      const p = this.adjacentInteractableProp;
+      this.callbacks.onPropInteract?.(p.kind, p.x, p.y);
+    }
   }
 
   private buildRoomFromState() {
@@ -891,6 +907,22 @@ export class AbyssScene extends Phaser.Scene {
       }
     }
     this.adjacentGroundItemId = adj;
+
+    // Same scan for interactable props. We can't walk *onto* a chest
+    // (collision=true), so neighbours-only is the realistic case, but
+    // dx+dy<=1 keeps it symmetrical with the pickup rule above.
+    let prop: { kind: string; x: number; y: number } | null = null;
+    for (const p of this.state.props ?? []) {
+      const interact = (p.metadata as { interact?: unknown } | null)?.interact;
+      if (!interact) continue;
+      const dx = Math.abs(p.x - this.playerTile.x);
+      const dy = Math.abs(p.y - this.playerTile.y);
+      if (dx + dy <= 1) {
+        prop = { kind: p.kind, x: p.x, y: p.y };
+        break;
+      }
+    }
+    this.adjacentInteractableProp = prop;
   }
 
   /** React calls this with the set of directions allowed by the
@@ -903,5 +935,11 @@ export class AbyssScene extends Phaser.Scene {
    *  up right now — used to render the "Z to pick up" HUD prompt. */
   getAdjacentGroundItemId(): string | null {
     return this.adjacentGroundItemId;
+  }
+
+  /** React calls this to know if a "Z to open" / "Z to interact" HUD
+   *  prompt should render for the current adjacent prop. */
+  getAdjacentInteractableProp(): { kind: string; x: number; y: number } | null {
+    return this.adjacentInteractableProp;
   }
 }
