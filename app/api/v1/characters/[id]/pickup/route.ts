@@ -62,7 +62,25 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .eq("id", groundItemId)
     .maybeSingle();
   if (gErr) return NextResponse.json({ error: "DB_FAILED", detail: gErr.message }, { status: 500 });
-  if (!ground) return NextResponse.json({ error: "GROUND_ITEM_GONE" }, { status: 404 });
+  if (!ground) {
+    // Idempotent / race-safe: the ground item is gone (already picked
+    // up by an earlier in-flight request, removed by another action,
+    // or stale state lingering from a previous session before
+    // dev-reset). Don't surface a scary error toast — just return a
+    // fresh RoomState so the client clears the stale adjacency and
+    // moves on. The user has done nothing wrong; nothing to retry.
+    const locale = typeof body.locale === "string" ? body.locale : "en";
+    const roomState = await buildRoomStateForCharacter(supabase, {
+      characterId: character.id,
+      userId: session.user.id,
+      locale,
+    });
+    if (!roomState.ok) {
+      const { status, body: errBody } = roomStateErrorResponse(roomState.error);
+      return NextResponse.json(errBody, { status });
+    }
+    return NextResponse.json({ data: { room_state: roomState.data } });
+  }
   if (ground.room_id !== character.current_room_id) {
     return NextResponse.json({ error: "WRONG_ROOM" }, { status: 403 });
   }

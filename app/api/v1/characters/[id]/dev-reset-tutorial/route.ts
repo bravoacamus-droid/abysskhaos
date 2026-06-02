@@ -19,6 +19,9 @@ export const dynamic = "force-dynamic";
  *
  * Wipes for the calling character:
  *   - tutorial_step = 'walk_to_cedric'
+ *   - opened_props = '{}' so chests / hatches / levers can be
+ *     re-tested. Persistence is a real feature for live players;
+ *     dev-reset is the explicit escape hatch for QA.
  *   - delete the cedric_the_broken row from character_npc_meets so
  *     the first-dialogue gate re-fires
  *
@@ -49,7 +52,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const [r1, r2] = await Promise.all([
     supabase
       .from("characters")
-      .update({ tutorial_step: "walk_to_cedric" })
+      .update({ tutorial_step: "walk_to_cedric", opened_props: [] })
       .eq("id", character.id),
     supabase
       .from("character_npc_meets")
