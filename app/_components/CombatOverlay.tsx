@@ -168,19 +168,22 @@ export function CombatOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-abyss-void text-white">
-      {/* Backdrop — cave texture blurred + darkened so the combat
-          plays inside the world rather than on a blank slate. */}
+      {/* Backdrop — either a cinematic scene (from the encounter
+          prop's combat_backdrop_url) or a tiled wall texture as
+          fallback. Cinematic gets a gentle darkening tint only;
+          tiled fallback gets a stronger blur because it's not meant
+          to be looked at directly. */}
       <div className="pointer-events-none absolute inset-0">
         {backdropUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={backdropUrl}
             alt=""
-            className="h-full w-full object-cover opacity-50"
-            style={{ filter: "blur(6px) brightness(0.45)", imageRendering: "pixelated" }}
+            className="h-full w-full object-cover"
+            style={{ filter: "brightness(0.7) saturate(0.9)", imageRendering: "pixelated" }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/60 via-abyss-deep/70 to-abyss-coal/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/45 to-abyss-coal/70" />
       </div>
 
       {/* Battlefield: enemies LEFT (facing east), player RIGHT
@@ -195,14 +198,22 @@ export function CombatOverlay({
               const targetKey = `mob:${idx}`;
               const isHit = hitFlash.has(targetKey);
               const isAttacker = attackFlash.has(targetKey);
-              // Prefer combat-session atlas (server snapshot) → encounter atlas (fresh).
+              // Prefer SIDE-VIEW combat sprite first (Phase 4c art);
+              // fall back to top-down rotation if a mob hasn't had the
+              // combat art pass yet.
               const sprite =
+                m.combat_sprite_atlas?.east ??
+                mobMeta?.combat_sprite_atlas?.east ??
+                m.combat_sprite_atlas?.west ??
+                mobMeta?.combat_sprite_atlas?.west ??
                 m.sprite_atlas?.east ??
                 mobMeta?.sprite_atlas?.east ??
                 m.sprite_atlas?.south ??
                 mobMeta?.sprite_atlas?.south ??
                 null;
               const idleFrames =
+                m.combat_animation_atlas?.idle?.east ??
+                mobMeta?.combat_animation_atlas?.idle?.east ??
                 m.animation_atlas?.idle?.east ??
                 mobMeta?.animation_atlas?.idle?.east ??
                 null;
@@ -249,19 +260,37 @@ export function CombatOverlay({
           <div className="flex flex-1 items-end justify-around pb-6 pr-4">
             <div className="flex flex-col items-center gap-1">
               <div className="relative h-36 w-36">
-                {player.sprite_atlas?.south ? (
-                  <FrameLoop
-                    idleFrames={player.animation_atlas?.idle?.south ?? null}
-                    fallbackUrl={player.sprite_atlas.south}
-                    alt={player.name}
-                    className={
-                      "h-full w-full object-contain transition-transform duration-200 " +
-                      (hitFlash.has("player") ? "-translate-x-1 brightness-200 " : "") +
-                      (attackFlash.has("player") ? "translate-x-2 " : "")
-                    }
-                    flipHorizontal
-                  />
-                ) : null}
+                {(() => {
+                  // Prefer side-view combat sprite. Player faces WEST
+                  // (toward enemies on the left), so use west variant
+                  // if present; else east flipped horizontally; else
+                  // the top-down south sprite flipped (last fallback).
+                  const combatWest = player.combat_sprite_atlas?.west ?? null;
+                  const combatEast = player.combat_sprite_atlas?.east ?? null;
+                  const topDown = player.sprite_atlas?.south ?? null;
+                  const src = combatWest ?? combatEast ?? topDown;
+                  if (!src) return null;
+                  const shouldFlip = !combatWest && (!!combatEast || !!topDown);
+                  // Prefer combat idle frames; fall back to top-down idle.
+                  const idleFrames =
+                    player.combat_animation_atlas?.idle?.west ??
+                    player.combat_animation_atlas?.idle?.east ??
+                    player.animation_atlas?.idle?.south ??
+                    null;
+                  return (
+                    <FrameLoop
+                      idleFrames={idleFrames}
+                      fallbackUrl={src}
+                      alt={player.name}
+                      className={
+                        "h-full w-full object-contain transition-transform duration-200 " +
+                        (hitFlash.has("player") ? "-translate-x-1 brightness-200 " : "") +
+                        (attackFlash.has("player") ? "translate-x-2 " : "")
+                      }
+                      flipHorizontal={shouldFlip}
+                    />
+                  );
+                })()}
                 {floats
                   .filter((f) => f.target === "player")
                   .map((f) => (

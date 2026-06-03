@@ -36,7 +36,7 @@ type Body = { encounter_id?: unknown; locale?: unknown };
 type Tilemap = {
   props?: Array<{ kind: string; x: number; y: number }>;
 };
-type MobIdMeta = { encounter_id?: string; mob_ids?: string[] };
+type MobIdMeta = { encounter_id?: string; mob_ids?: string[]; combat_backdrop_url?: string };
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await resolveSession(req);
@@ -115,7 +115,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // future combat scene.
   const { data: monsterRows, error: mErr } = await supabase
     .from("monsters")
-    .select("id, name, base_hp, base_atk, base_def, base_exp, sprite_atlas, animation_atlas")
+    .select("id, name, base_hp, base_atk, base_def, base_exp, sprite_atlas, animation_atlas, combat_sprite_atlas, combat_animation_atlas")
     .in("id", mobIds);
   if (mErr) return NextResponse.json({ error: "DB_FAILED", detail: mErr.message }, { status: 500 });
 
@@ -149,6 +149,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       sprite_atlas: (m.sprite_atlas as Record<string, string> | null) ?? null,
       animation_atlas:
         (m.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
+      combat_sprite_atlas:
+        (m.combat_sprite_atlas as Record<string, string> | null) ?? null,
+      combat_animation_atlas:
+        (m.combat_animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
     }));
 
   const roomState = await buildRoomStateForCharacter(supabase, {
@@ -205,6 +209,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         exp: m.exp,
         sprite_atlas: m.sprite_atlas,
         animation_atlas: m.animation_atlas,
+        combat_sprite_atlas: m.combat_sprite_atlas,
+        combat_animation_atlas: m.combat_animation_atlas,
       })),
     });
     const { data: ins, error: insErr } = await supabase
@@ -244,11 +250,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     };
   }
 
+  // Optional cinematic combat backdrop (a PixelLab scene painted
+  // specifically for this encounter). Falls back to null and the
+  // CombatOverlay uses the room's background_tile_url instead.
+  const combatBackdropUrl =
+    ((matchingProp.metadata as MobIdMeta).combat_backdrop_url as string | undefined) ?? null;
+
   return NextResponse.json({
     data: {
       encounter_id: encounterId,
       mobs,
       combat_session: combatSession,
+      combat_backdrop_url: combatBackdropUrl,
       room_state: roomState.data,
     },
   });

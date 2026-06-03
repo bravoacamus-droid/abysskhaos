@@ -290,6 +290,11 @@ export type RoomState = {
     class_name: string;
     sprite_atlas: SpriteAtlas | null;
     animation_atlas: AnimationAtlas | null;
+    /** Side-view combat sprite atlas for the CombatOverlay. Distinct
+     *  from sprite_atlas (top-down exploration). Falls back to the
+     *  top-down sprite when null. */
+    combat_sprite_atlas: Record<string, string> | null;
+    combat_animation_atlas: Record<string, Record<string, string[]>> | null;
     portrait_url: string | null;
     tutorial_step: TutorialStep;
     // Full character profile + combat stats — used by the inventory /
@@ -499,6 +504,8 @@ export type EncounterMob = {
   exp: number;
   sprite_atlas: Record<string, string> | null;
   animation_atlas: Record<string, Record<string, string[]>> | null;
+  combat_sprite_atlas: Record<string, string> | null;
+  combat_animation_atlas: Record<string, Record<string, string[]>> | null;
 };
 
 export type CombatMobState = {
@@ -514,6 +521,10 @@ export type CombatMobState = {
   /** Per-(animation × direction) frame URLs. Used by CombatOverlay
    *  to play breathing-idle + attack loops. */
   animation_atlas: Record<string, Record<string, string[]>> | null;
+  /** Phase 4c — dedicated side-view combat sprite + animations.
+   *  Overlay prefers these when present. */
+  combat_sprite_atlas: Record<string, string> | null;
+  combat_animation_atlas: Record<string, Record<string, string[]>> | null;
 };
 
 export type CombatTurn = { kind: "player" } | { kind: "mob"; idx: number };
@@ -541,7 +552,7 @@ export type CombatSession = {
 
 export function startEncounter(
   opts: FetchOpts & { characterId: string; encounterId: string; locale: string },
-): Promise<{ encounter_id: string; mobs: EncounterMob[]; combat_session: CombatSession; room_state: RoomState }> {
+): Promise<{ encounter_id: string; mobs: EncounterMob[]; combat_session: CombatSession; combat_backdrop_url: string | null; room_state: RoomState }> {
   return call(`/api/v1/characters/${opts.characterId}/encounter/start`, "POST", {
     initData: opts.initData,
     body: { encounter_id: opts.encounterId, locale: opts.locale },

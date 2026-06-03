@@ -90,7 +90,7 @@ export async function buildRoomStateForCharacter(
         .eq("room_id", roomId),
       supabase
         .from("classes")
-        .select("id, name, sprite_atlas, animation_atlas, portrait_url")
+        .select("id, name, sprite_atlas, animation_atlas, combat_sprite_atlas, combat_animation_atlas, portrait_url")
         .eq("id", character.class_id)
         .single(),
       supabase.from("props").select("id, sprite_url, collision, display_scale, metadata"),
@@ -475,6 +475,14 @@ export async function buildRoomStateForCharacter(
         sprite_atlas: (klass.sprite_atlas as Record<string, string> | null) ?? null,
         animation_atlas:
           (klass.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
+        // Phase 4c — side-view combat sprite + animations. Used only
+        // by the CombatOverlay; exploration keeps reading the top-down
+        // sprite_atlas above. Falls back to null when the class hasn't
+        // had the combat-art pass yet.
+        combat_sprite_atlas:
+          (klass.combat_sprite_atlas as Record<string, string> | null) ?? null,
+        combat_animation_atlas:
+          (klass.combat_animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
         portrait_url: (klass.portrait_url as string | null) ?? null,
         tutorial_step: (character.tutorial_step as string | null) ?? "complete",
         // Full character profile + combat stats — exposed so the

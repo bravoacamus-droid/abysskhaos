@@ -72,7 +72,7 @@ export default function PhaserExploration({
   /** Phase 4a: when an encounter trigger fires we run a quick cutscene
    *  (enemies walk in) then show the placeholder pre-combat modal
    *  until the real combat scene ships. `null` = no cutscene running. */
-  const [encounterCutscene, setEncounterCutscene] = useState<{ encounterId: string; mobs: EncounterMob[]; session: CombatSession } | null>(null);
+  const [encounterCutscene, setEncounterCutscene] = useState<{ encounterId: string; mobs: EncounterMob[]; session: CombatSession; backdropUrl: string | null } | null>(null);
   /** True once the cutscene walk-in finishes and we're showing the
    *  combat overlay (Phase 4b — was a placeholder modal in 4a). */
   const [showCombat, setShowCombat] = useState(false);
@@ -366,7 +366,7 @@ export default function PhaserExploration({
       });
       stateRef.current = resp.room_state;
       setState(resp.room_state);
-      setEncounterCutscene({ encounterId, mobs: resp.mobs, session: resp.combat_session });
+      setEncounterCutscene({ encounterId, mobs: resp.mobs, session: resp.combat_session, backdropUrl: resp.combat_backdrop_url });
 
       // Drive the cutscene: enemies emerge from the room's south
       // door tile (player came from the north), walk north to one
@@ -763,11 +763,11 @@ export default function PhaserExploration({
             session={encounterCutscene.session}
             player={state.player}
             mobs={encounterCutscene.mobs}
-            // Use the biome wall tile as the backdrop — same texture
-            // that paints the cave halo around the explorable area,
-            // CSS-blurred + darkened so combat reads as "inside the
-            // current room" rather than on an empty canvas.
-            backdropUrl={state.background_tile_url}
+            // Prefer the encounter's cinematic combat backdrop when
+            // set on the trigger prop's metadata; fall back to the
+            // room's biome wall tile (less atmospheric but always
+            // available).
+            backdropUrl={encounterCutscene.backdropUrl ?? state.background_tile_url}
             onAttack={doCombatAttack}
             onClose={closeCombat}
           />

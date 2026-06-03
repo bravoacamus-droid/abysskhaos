@@ -22,8 +22,16 @@ export const dynamic = "force-dynamic";
  *   - opened_props = '{}' so chests / hatches / levers can be
  *     re-tested. Persistence is a real feature for live players;
  *     dev-reset is the explicit escape hatch for QA.
+ *   - seen_encounters = '{}' so scripted ambushes (bridge centaur +
+ *     archer) can re-fire on the next walk-through; otherwise after
+ *     defeat-respawn the combat couldn't replay because the trigger
+ *     was already marked seen.
+ *   - delete every row from combat_sessions for this character —
+ *     stale 'over' rows + any abandoned in-flight session both go,
+ *     so a fresh /encounter/start can build a new one without
+ *     hitting the partial-unique-active-session index.
  *   - delete the cedric_the_broken row from character_npc_meets so
- *     the first-dialogue gate re-fires
+ *     the first-dialogue gate re-fires.
  *
  * Preserves: character_items (inventory + equipped) and any
  * room_ground_items still on the floor — so a half-finished previous
@@ -49,18 +57,22 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const [r1, r2] = await Promise.all([
+  const [r1, r2, r3] = await Promise.all([
     supabase
       .from("characters")
-      .update({ tutorial_step: "walk_to_cedric", opened_props: [] })
+      .update({ tutorial_step: "walk_to_cedric", opened_props: [], seen_encounters: [] })
       .eq("id", character.id),
     supabase
       .from("character_npc_meets")
       .delete()
       .eq("character_id", character.id)
       .eq("npc_id", "cedric_the_broken"),
+    supabase
+      .from("combat_sessions")
+      .delete()
+      .eq("character_id", character.id),
   ]);
-  for (const r of [r1, r2]) {
+  for (const r of [r1, r2, r3]) {
     if (r.error) {
       return NextResponse.json({ error: "DB_FAILED", detail: r.error.message }, { status: 500 });
     }

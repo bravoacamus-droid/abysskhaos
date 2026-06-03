@@ -35,6 +35,12 @@ export type CombatMob = {
    *  overlay play idle / attack loops directly without an extra
    *  fetch. Keys: 'idle', 'walk', 'attack' once Phase 4c expands. */
   animation_atlas: Record<string, Record<string, string[]>> | null;
+  /** Phase 4c — dedicated side-view combat atlas. CombatOverlay
+   *  prefers these over sprite_atlas / animation_atlas (which are
+   *  top-down for the overworld). Null while a mob hasn't had the
+   *  combat art pass yet — overlay falls back gracefully. */
+  combat_sprite_atlas: Record<string, string> | null;
+  combat_animation_atlas: Record<string, Record<string, string[]>> | null;
 };
 
 export type CombatTurn =
@@ -66,7 +72,7 @@ export type CombatSessionState = {
 export function buildInitialCombatSession(args: {
   encounterId: string;
   player: { hp_current: number; hp_max: number; atk: number; def: number };
-  mobs: Array<{ id: string; name: string; hp_max: number; atk: number; def: number; exp: number; sprite_atlas: Record<string, string> | null; animation_atlas: Record<string, Record<string, string[]>> | null }>;
+  mobs: Array<{ id: string; name: string; hp_max: number; atk: number; def: number; exp: number; sprite_atlas: Record<string, string> | null; animation_atlas: Record<string, Record<string, string[]>> | null; combat_sprite_atlas: Record<string, string> | null; combat_animation_atlas: Record<string, Record<string, string[]>> | null }>;
 }): Omit<CombatSessionState, "id"> {
   // Turn order: player goes first, then mobs in declared order. Phase
   // 4c will sort by AGI / initiative; for now first-attempt-friendly
@@ -92,6 +98,8 @@ export function buildInitialCombatSession(args: {
       alive: true,
       sprite_atlas: m.sprite_atlas,
       animation_atlas: m.animation_atlas,
+      combat_sprite_atlas: m.combat_sprite_atlas,
+      combat_animation_atlas: m.combat_animation_atlas,
     })),
     turn_order,
     turn_idx: 0,
