@@ -97,6 +97,7 @@
     "enemy_turn": "Turno enemigo",
     "resolving": "Resolviendo…",
     "actor_you": "Tú",
+    "log_empty": "El combate comienza…",
     "log_attack": "{actor} ataca a {target} — {dmg} de daño",
     "log_death": "{actor} cae derrotado",
     "log_victory": "¡Victoria! +{exp} EXP · +{khryn} Khryn",

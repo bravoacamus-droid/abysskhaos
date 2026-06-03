@@ -168,6 +168,10 @@ export class AbyssScene extends Phaser.Scene {
   /** Set true while a cutscene is playing — attemptMove ignores input
    *  so the player can't walk away from the camera moment. */
   private cutsceneActive = false;
+  /** mob_id → animation_atlas pending Phaser animation registration.
+   *  queueAssetsForCurrentState fills this; buildRoomFromState reads
+   *  it after Phaser finishes loading frame textures. */
+  private pendingMobAnimations: Map<string, Record<string, Record<string, string[]>> | null> = new Map();
   /** One-shot ambient triggers — props whose metadata declares
    *  `one_shot_on_step: { x, y }` stay invisible until the player
    *  steps onto the named tile, then play their animation once
@@ -400,6 +404,11 @@ export class AbyssScene extends Phaser.Scene {
           }
         }
         queued.push(...this.queueAnimationAssets(`mob-${m.id}`, m.animation_atlas ?? null));
+        // Stash the atlas so buildRoomFromState can register the
+        // Phaser animations after the textures land. spawnCutsceneMob
+        // then plays them — previously we tried to .play() an animKey
+        // that was never created, so the mob slid in without legs.
+        this.pendingMobAnimations.set(m.id, m.animation_atlas ?? null);
       }
     }
 
@@ -629,6 +638,12 @@ export class AbyssScene extends Phaser.Scene {
     }
     this.playerAnimState = "idle";
     this.createAnimationsFor("player", s.player.animation_atlas ?? null);
+    // Register any pending cutscene mob animations now that the
+    // texture frames have landed. spawnCutsceneMob expects animKey
+    // `mob-${id}-walk-${dir}` to exist BEFORE it calls .play().
+    for (const [mobId, atlas] of this.pendingMobAnimations) {
+      this.createAnimationsFor(`mob-${mobId}`, atlas);
+    }
     const playerKey = this.spriteKeyForDir("player", this.playerDir);
     if (this.textures.exists(playerKey)) {
       this.player = this.add.sprite(

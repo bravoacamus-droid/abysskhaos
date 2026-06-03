@@ -204,6 +204,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         def: m.def,
         exp: m.exp,
         sprite_atlas: m.sprite_atlas,
+        animation_atlas: m.animation_atlas,
       })),
     });
     const { data: ins, error: insErr } = await supabase

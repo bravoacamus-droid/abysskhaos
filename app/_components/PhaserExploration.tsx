@@ -761,10 +761,13 @@ export default function PhaserExploration({
           <CombatOverlay
             locale={locale}
             session={encounterCutscene.session}
-            playerSpriteUrl={state.player.sprite_atlas?.south ?? null}
-            playerName={state.player.name || characterName}
-            playerLabel={`Nv.${state.player.level} · ${state.player.class_name}`}
+            player={state.player}
             mobs={encounterCutscene.mobs}
+            // Use the biome wall tile as the backdrop — same texture
+            // that paints the cave halo around the explorable area,
+            // CSS-blurred + darkened so combat reads as "inside the
+            // current room" rather than on an empty canvas.
+            backdropUrl={state.background_tile_url}
             onAttack={doCombatAttack}
             onClose={closeCombat}
           />

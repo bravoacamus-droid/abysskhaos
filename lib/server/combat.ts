@@ -31,6 +31,10 @@ export type CombatMob = {
   /** Server-resolved sprite atlas so the React overlay can render
    *  the mob in side-view without round-tripping to /monsters. */
   sprite_atlas: Record<string, string> | null;
+  /** Per-(animation × direction) frame URLs. Lets the combat
+   *  overlay play idle / attack loops directly without an extra
+   *  fetch. Keys: 'idle', 'walk', 'attack' once Phase 4c expands. */
+  animation_atlas: Record<string, Record<string, string[]>> | null;
 };
 
 export type CombatTurn =
@@ -62,7 +66,7 @@ export type CombatSessionState = {
 export function buildInitialCombatSession(args: {
   encounterId: string;
   player: { hp_current: number; hp_max: number; atk: number; def: number };
-  mobs: Array<{ id: string; name: string; hp_max: number; atk: number; def: number; exp: number; sprite_atlas: Record<string, string> | null }>;
+  mobs: Array<{ id: string; name: string; hp_max: number; atk: number; def: number; exp: number; sprite_atlas: Record<string, string> | null; animation_atlas: Record<string, Record<string, string[]>> | null }>;
 }): Omit<CombatSessionState, "id"> {
   // Turn order: player goes first, then mobs in declared order. Phase
   // 4c will sort by AGI / initiative; for now first-attempt-friendly
@@ -87,6 +91,7 @@ export function buildInitialCombatSession(args: {
       exp: m.exp,
       alive: true,
       sprite_atlas: m.sprite_atlas,
+      animation_atlas: m.animation_atlas,
     })),
     turn_order,
     turn_idx: 0,

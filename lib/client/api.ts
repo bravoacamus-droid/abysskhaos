@@ -511,6 +511,9 @@ export type CombatMobState = {
   exp: number;
   alive: boolean;
   sprite_atlas: Record<string, string> | null;
+  /** Per-(animation × direction) frame URLs. Used by CombatOverlay
+   *  to play breathing-idle + attack loops. */
+  animation_atlas: Record<string, Record<string, string[]>> | null;
 };
 
 export type CombatTurn = { kind: "player" } | { kind: "mob"; idx: number };
