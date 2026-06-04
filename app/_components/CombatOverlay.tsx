@@ -241,115 +241,105 @@ export function CombatOverlay({
         <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/40 to-abyss-coal/75" />
       </div>
 
-      {/* Battlefield: enemies LEFT (large, grouped), player RIGHT (large).
-          Both anchored to a shared baseline so they read as standing
-          on the same ground line. */}
+      {/* Battlefield: all 3 entities in one horizontal row sharing
+          a baseline (FF VI / Octopath convention). Enemies grouped
+          LEFT, player on the RIGHT — the row evenly distributes the
+          available width via justify-around so the player slot is
+          never crowded out on narrow mobile viewports. */}
       <div className="relative flex-1">
-        <div className="absolute inset-x-0 bottom-2 top-10 flex items-end justify-between gap-4 px-4">
-          {/* LEFT — enemy lineup */}
-          <div className="flex flex-1 items-end justify-around gap-1 pb-2">
-            {session.mobs.map((m, idx) => {
-              const mobMeta = mobs[idx];
-              const key = `mob:${idx}`;
-              const state = animStates[key] ?? "idle";
-              const isHit = hitFlash.has(key);
-              const baseSprite =
-                m.combat_sprite_atlas?.east ??
-                mobMeta?.combat_sprite_atlas?.east ??
-                m.sprite_atlas?.east ??
-                mobMeta?.sprite_atlas?.east ??
-                m.sprite_atlas?.south ??
-                mobMeta?.sprite_atlas?.south ??
-                null;
-              const atlas =
-                m.combat_animation_atlas ??
-                mobMeta?.combat_animation_atlas ??
-                m.animation_atlas ??
-                mobMeta?.animation_atlas ??
-                null;
-              return (
-                <div key={idx} className="flex flex-col items-center gap-1">
-                  <div className="relative h-52 w-52 sm:h-56 sm:w-56">
-                    <CharacterStage
-                      baseSprite={baseSprite}
-                      atlas={atlas}
-                      facing="east"
-                      state={state}
-                      flash={isHit}
-                      grayscale={!m.alive}
-                      debugLabel={m.name}
-                    />
-                    {floats
-                      .filter((f) => f.target === key)
-                      .map((f) => (
-                        <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
-                      ))}
-                  </div>
-                  <EntityBar
-                    label={mobMeta?.name_localized ?? m.name}
-                    hp={m.hp}
-                    hpMax={m.max_hp}
-                    mp={null}
-                    mpMax={null}
-                    isCurrentActor={currentTurn.kind === "mob" && currentTurn.idx === idx}
+        <div className="absolute inset-x-0 bottom-2 top-10 flex items-end justify-around gap-2 px-2">
+          {/* Enemies (LEFT) — render each one as a flex-1 slot so they
+              compress together to leave room for the player slot. */}
+          {session.mobs.map((m, idx) => {
+            const mobMeta = mobs[idx];
+            const key = `mob:${idx}`;
+            const state = animStates[key] ?? "idle";
+            const isHit = hitFlash.has(key);
+            const baseSprite =
+              m.combat_sprite_atlas?.east ??
+              mobMeta?.combat_sprite_atlas?.east ??
+              m.sprite_atlas?.east ??
+              mobMeta?.sprite_atlas?.east ??
+              m.sprite_atlas?.south ??
+              mobMeta?.sprite_atlas?.south ??
+              null;
+            const atlas =
+              m.combat_animation_atlas ??
+              mobMeta?.combat_animation_atlas ??
+              m.animation_atlas ??
+              mobMeta?.animation_atlas ??
+              null;
+            return (
+              <div key={idx} className="flex min-w-0 flex-1 flex-col items-center gap-1 pb-2">
+                <div className="relative aspect-square w-full max-w-[180px]">
+                  <CharacterStage
+                    baseSprite={baseSprite}
+                    atlas={atlas}
+                    facing="east"
+                    state={state}
+                    flash={isHit}
+                    grayscale={!m.alive}
+                    debugLabel={m.name}
                   />
+                  {floats
+                    .filter((f) => f.target === key)
+                    .map((f) => (
+                      <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
+                    ))}
                 </div>
-              );
-            })}
-          </div>
-
-          {/* RIGHT — player */}
-          <div className="flex flex-1 items-end justify-around pb-2">
-            <div className="flex flex-col items-center gap-1">
-              <div className="relative h-56 w-56 sm:h-64 sm:w-64">
-                {(() => {
-                  // Player sprite resolution priority:
-                  //   1. combat_sprite_atlas.west (proper side-view)
-                  //   2. combat_sprite_atlas.east flipped
-                  //   3. top-down south flipped (last-ditch)
-                  const csWest = player.combat_sprite_atlas?.west ?? null;
-                  const csEast = player.combat_sprite_atlas?.east ?? null;
-                  const topSouth = player.sprite_atlas?.south ?? null;
-                  const baseSprite = csWest ?? csEast ?? topSouth ?? null;
-                  // If atlas has the WEST frames use them; if only east
-                  // frames exist, the combat_animation_atlas is keyed
-                  // east — we flip CSS for the player slot. Otherwise
-                  // fall back to top-down animation_atlas.idle.south
-                  // (still better than a static frame).
-                  const combatAtlasHasWest = !!player.combat_animation_atlas?.idle?.west;
-                  const facing: "east" | "west" = combatAtlasHasWest ? "west" : "east";
-                  const flip = !combatAtlasHasWest && (!!csEast || !!topSouth || !!player.combat_animation_atlas);
-                  return (
-                    <CharacterStage
-                      baseSprite={baseSprite}
-                      atlas={player.combat_animation_atlas ?? player.animation_atlas ?? null}
-                      facing={facing}
-                      flipFallback={flip}
-                      state={animStates["player"] ?? "idle"}
-                      flash={hitFlash.has("player")}
-                      grayscale={false}
-                      debugLabel={player.name}
-                    />
-                  );
-                })()}
-                {floats
-                  .filter((f) => f.target === "player")
-                  .map((f) => (
-                    <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
-                  ))}
+                <EntityBar
+                  label={mobMeta?.name_localized ?? m.name}
+                  hp={m.hp}
+                  hpMax={m.max_hp}
+                  mp={null}
+                  mpMax={null}
+                  isCurrentActor={currentTurn.kind === "mob" && currentTurn.idx === idx}
+                />
               </div>
-              <EntityBar
-                label={player.name}
-                hp={session.player_hp}
-                hpMax={session.player_max_hp}
-                mp={player.mp_current}
-                mpMax={player.mp_max_effective}
-                isCurrentActor={currentTurn.kind === "player" && !session.is_over}
-              />
-              <p className="text-[10px] uppercase tracking-widest text-abyss-fog">
-                Nv.{player.level} · {player.class_name}
-              </p>
+            );
+          })}
+
+          {/* Player (RIGHT) — same flex-1 slot so the row balances. */}
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-1 pb-2">
+            <div className="relative aspect-square w-full max-w-[200px]">
+              {(() => {
+                const csWest = player.combat_sprite_atlas?.west ?? null;
+                const csEast = player.combat_sprite_atlas?.east ?? null;
+                const topSouth = player.sprite_atlas?.south ?? null;
+                const baseSprite = csWest ?? csEast ?? topSouth ?? null;
+                const combatAtlasHasWest = !!player.combat_animation_atlas?.idle?.west;
+                const facing: "east" | "west" = combatAtlasHasWest ? "west" : "east";
+                const flip = !combatAtlasHasWest && (!!csEast || !!topSouth || !!player.combat_animation_atlas);
+                return (
+                  <CharacterStage
+                    baseSprite={baseSprite}
+                    atlas={player.combat_animation_atlas ?? player.animation_atlas ?? null}
+                    facing={facing}
+                    flipFallback={flip}
+                    state={animStates["player"] ?? "idle"}
+                    flash={hitFlash.has("player")}
+                    grayscale={false}
+                    debugLabel={player.name}
+                  />
+                );
+              })()}
+              {floats
+                .filter((f) => f.target === "player")
+                .map((f) => (
+                  <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
+                ))}
             </div>
+            <EntityBar
+              label={player.name}
+              hp={session.player_hp}
+              hpMax={session.player_max_hp}
+              mp={player.mp_current}
+              mpMax={player.mp_max_effective}
+              isCurrentActor={currentTurn.kind === "player" && !session.is_over}
+            />
+            <p className="text-[9px] uppercase tracking-widest text-abyss-fog">
+              Nv.{player.level} · {player.class_name}
+            </p>
           </div>
         </div>
       </div>
@@ -592,7 +582,7 @@ function EntityBar({
   return (
     <div
       className={
-        "w-44 rounded border bg-abyss-void/80 px-1.5 py-1 backdrop-blur " +
+        "w-full max-w-[160px] rounded border bg-abyss-void/80 px-1.5 py-1 backdrop-blur " +
         (isCurrentActor ? "border-amber-400 ring-1 ring-amber-400/60" : "border-abyss-coal/70")
       }
     >
