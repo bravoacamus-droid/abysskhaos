@@ -514,6 +514,12 @@ export function CombatOverlay({
           85%  { opacity: 1; }
           100% { left: 78%; opacity: 0.2; transform: translateY(-50%) scaleX(1); }
         }
+        @keyframes abyssMobDissolve {
+          0%   { opacity: 1; transform: translateY(0) scale(1); filter: brightness(1); }
+          40%  { opacity: 0.85; filter: brightness(1.6); }
+          100% { opacity: 0; transform: translateY(8px) scale(0.92); filter: brightness(1) blur(2px); }
+        }
+        .abyss-mob-dissolve { animation: abyssMobDissolve 900ms ease-out 200ms forwards; }
       `}</style>
 
       {/* FFVI-style bottom HUD: two blue-gradient boxes with white
@@ -743,13 +749,17 @@ function EnemyCluster({
                   key={idx}
                   className={
                     "relative flex flex-col items-center gap-1 transition-transform " +
-                    (isFocused ? "scale-[1.05]" : "")
+                    (isFocused ? "scale-[1.05] " : "") +
+                    // Dead mobs: smooth fade-out (forwards holds at
+                    // opacity 0 + scaled down). NOT grayscale per
+                    // user feedback.
+                    (!m.alive ? "abyss-mob-dissolve pointer-events-none " : "")
                   }
                   style={{ transform: `translateY(${offset * 18}px)` }}
                 >
                   <div
                     className={
-                      "relative aspect-square w-full max-w-[280px] " +
+                      "relative aspect-square w-full max-w-[340px] " +
                       (isFocused ? "drop-shadow-[0_0_8px_rgba(252,211,77,0.85)] " : "") +
                       (lungeKeys.has(key) ? "abyss-lunge-right" : "")
                     }
@@ -783,7 +793,7 @@ function EnemyCluster({
                       facing={(atlas?.idle?.["south-east"] ? "south-east" : "east")}
                       state={state}
                       flash={isHit}
-                      grayscale={!m.alive}
+                      grayscale={false}
                       flipFallback={MOB_SPRITE_FLIP[m.id] ?? false}
                       staticIdle={true}
                       debugLabel={m.name}
