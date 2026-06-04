@@ -13,22 +13,25 @@ import type {
 } from "@/lib/client/api";
 
 /**
- * Phase 4d combat overlay — side-view battle in the FF VI / Octopath
- * tradition. Each entity (player + each alive mob) is rendered through
- * <CharacterStage> which knows how to:
- *   - loop the idle (breathing) frames forever
- *   - play one-shot animations (attack, skill, hurt, dodge, block) and
- *     return to idle when done
- *   - hold terminal animations (death, victory) on the last frame
+ * Phase 4d Combat Overlay — Final Fantasy VI Pixel Remaster styling.
  *
- * After every /combat/action response the parent walks the appended
- * log entries (attack, miss, stance, death, victory, defeat) and
- * SCHEDULES the matching state transition per entity, then plays back
- * in real time so the player sees the swing connect, the target flinch,
- * mobs counter, etc.
+ * Layout (top → bottom):
+ *   - Battlefield: enemies anchored LEFT (always), party on RIGHT.
+ *     One horizontal flex row sharing a baseline so all entities
+ *     stand on the same ground line.
+ *   - Bottom HUD: two boxes side by side with the FFVI blue-gradient
+ *     fill + white rounded border the user asked for. LEFT box is the
+ *     4-action command list (Attack / Skill / Defend / Dodge); RIGHT
+ *     box is the active party panel (player name, level, HP, MP).
+ *     A blinking pointing-glove cursor highlights the focused action
+ *     on the player's turn and goes still when it's the enemy's turn
+ *     — the FFVI tell.
  *
- * Server is authoritative: dmg / hp / dodge roll all come pre-decided
- * in `appended`; this component only animates them.
+ * Sprites use a state machine: idle / attack / skill / hurt / dodge /
+ * block / death / victory. <CharacterStage> swaps frame sources from
+ * the combat_animation_atlas and steps with a single setInterval.
+ * Server is authoritative — onAction returns the resolved log, this
+ * component just animates the steps in playAppended().
  */
 
 type FloatingNumber = {
@@ -49,16 +52,30 @@ type AnimState =
   | "death"
   | "victory";
 
-/** Per-state hint that drives <CharacterStage> playback. */
 const ANIM_HINT: Record<AnimState, { fps: number; loop: boolean; hold: boolean }> = {
   idle:    { fps: 6,  loop: true,  hold: false },
-  attack:  { fps: 14, loop: false, hold: false },
-  skill:   { fps: 12, loop: false, hold: false },
-  hurt:    { fps: 14, loop: false, hold: false },
-  dodge:   { fps: 16, loop: false, hold: false },
-  block:   { fps: 10, loop: false, hold: true  },
-  death:   { fps: 10, loop: false, hold: true  },
-  victory: { fps: 8,  loop: true,  hold: false },
+  attack:  { fps: 10, loop: false, hold: false },
+  skill:   { fps: 10, loop: false, hold: false },
+  hurt:    { fps: 12, loop: false, hold: false },
+  dodge:   { fps: 14, loop: false, hold: false },
+  block:   { fps: 8,  loop: false, hold: true  },
+  death:   { fps: 8,  loop: false, hold: true  },
+  victory: { fps: 6,  loop: true,  hold: false },
+};
+
+const ACTIONS: { kind: PlayerActionKind; labelKey: string; needsTarget: boolean }[] = [
+  { kind: "attack", labelKey: "combat.action_attack", needsTarget: true  },
+  { kind: "skill",  labelKey: "combat.action_skill",  needsTarget: true  },
+  { kind: "defend", labelKey: "combat.action_defend", needsTarget: false },
+  { kind: "dodge",  labelKey: "combat.action_dodge",  needsTarget: false },
+];
+
+/** Some enemy sprites read facing the WRONG way because the PixelLab
+ *  generation interpreted "east" in mirror. Toggle per-mob until we
+ *  regenerate the corrected art. */
+const MOB_SPRITE_FLIP: Record<string, boolean> = {
+  centaur_warrior: true,
+  // lizardman_archer faces the right way at default east.
 };
 
 type Props = {
@@ -93,11 +110,10 @@ export function CombatOverlay({
   const [floats, setFloats] = useState<FloatingNumber[]>([]);
   const floatIdRef = useRef(1);
   const [showOutcomeCard, setShowOutcomeCard] = useState(initialSession.is_over);
-  /** True between the user tap and the end of the log-entry playback —
-   *  blocks new actions while the cinema plays. */
   const [playing, setPlaying] = useState(false);
-  /** Per-entity animation state. Key: 'player' | 'mob:0' | 'mob:1' …
-   *  Drives <CharacterStage>. */
+  /** Index of the action the player is hovering / has highlighted. */
+  const [actionIdx, setActionIdx] = useState(0);
+  /** Per-entity animation state. */
   const [animStates, setAnimStates] = useState<Record<string, AnimState>>(() => {
     const s: Record<string, AnimState> = { player: "idle" };
     initialSession.mobs.forEach((_, i) => { s[`mob:${i}`] = "idle"; });
@@ -106,6 +122,7 @@ export function CombatOverlay({
 
   const currentTurn: CombatTurn =
     session.turn_order[session.turn_idx % session.turn_order.length] ?? { kind: "player" };
+  const isPlayerTurn = currentTurn.kind === "player" && !session.is_over && !busy && !playing;
 
   function setEntityAnim(key: string, state: AnimState) {
     setAnimStates((prev) => ({ ...prev, [key]: state }));
@@ -134,63 +151,58 @@ export function CombatOverlay({
     }, HIT_FLASH_MS);
   }
 
-  /** Play back the server-resolved log entries one by one with the
-   *  right timing so the user actually sees the attack frames + the
-   *  target reaction. */
+  /** Walk through the server-resolved log entries and animate them
+   *  one-by-one so the user actually SEES the swing connect + the
+   *  target flinch. */
   async function playAppended(appended: CombatLogEntry[]) {
     setPlaying(true);
     for (const entry of appended) {
       if (entry.kind === "attack") {
         const isSkill = entry.action_kind === "skill" && entry.actor === "player";
         const actorState: AnimState = isSkill ? "skill" : "attack";
-        const actorDurMs = Math.round(1000 * (isSkill ? 8 : 6) / ANIM_HINT[actorState].fps);
+        // Hold the attack pose for a beat over the full frame count
+        // so the user clearly registers the swing.
+        const frameCount = isSkill ? 8 : 6;
+        const actorDurMs = Math.round((frameCount / ANIM_HINT[actorState].fps) * 1000);
         setEntityAnim(entry.actor, actorState);
-        // Reaction lands ~halfway through the swing.
-        await sleep(Math.round(actorDurMs * 0.45));
+        // Pre-impact pause so we can SEE the wind-up.
+        await sleep(Math.round(actorDurMs * 0.55));
         setEntityAnim(entry.target, "hurt");
         flashEntity(entry.target);
         pushFloat(entry.target, entry.dmg, "damage");
-        await sleep(Math.round(actorDurMs * 0.55) + 250);
-        // Return to idle unless the target just died (death entry will
-        // override below).
+        // Hold the connect + flinch beat.
+        await sleep(Math.round(actorDurMs * 0.45) + 350);
         setAnimStates((prev) => ({
           ...prev,
-          [entry.actor]: prev[entry.actor] === "death" ? "death" : "idle",
+          [entry.actor]:  prev[entry.actor]  === "death" ? "death" : "idle",
           [entry.target]: prev[entry.target] === "death" ? "death" : "idle",
         }));
+        await sleep(120);
       } else if (entry.kind === "miss") {
-        // Mob attacked, player dodged. Mob plays attack; player plays
-        // dodge alongside; no damage number, just "MISS".
         setEntityAnim(entry.actor, "attack");
-        await sleep(150);
+        await sleep(280);
         setEntityAnim(entry.target, "dodge");
         pushFloat(entry.target, "MISS", "miss");
-        await sleep(550);
+        await sleep(600);
         setAnimStates((prev) => ({
           ...prev,
-          [entry.actor]: prev[entry.actor] === "death" ? "death" : "idle",
+          [entry.actor]:  prev[entry.actor]  === "death" ? "death" : "idle",
           [entry.target]: prev[entry.target] === "death" ? "death" : "idle",
         }));
       } else if (entry.kind === "stance") {
-        // Player chose defend/dodge — hold the corresponding pose
-        // until the mob counter sequence finishes (next idle reset).
         if (entry.mode === "defending") {
           setEntityAnim("player", "block");
-        } else {
-          // For dodge stance we'll show the actual dodge inline with
-          // each incoming attack (miss entries above). Stay on idle.
-          setEntityAnim("player", "idle");
         }
-        await sleep(250);
+        await sleep(300);
       } else if (entry.kind === "death") {
         setEntityAnim(entry.actor, "death");
-        await sleep(500);
+        await sleep(600);
       } else if (entry.kind === "victory") {
         setEntityAnim("player", "victory");
-        await sleep(400);
+        await sleep(500);
       } else if (entry.kind === "defeat") {
         setEntityAnim("player", "death");
-        await sleep(500);
+        await sleep(600);
       }
     }
     setPlaying(false);
@@ -219,15 +231,16 @@ export function CombatOverlay({
     [session.mobs],
   );
 
-  const recentLog = useMemo(() => {
-    const all = session.log_entries.slice(-6);
-    return all.map((e) => formatLogEntry(e, locale, session.mobs, mobs));
-  }, [session.log_entries, session.mobs, locale, mobs]);
+  function triggerSelectedAction() {
+    const choice = ACTIONS[actionIdx];
+    if (!choice) return;
+    if (choice.needsTarget && defaultTargetIdx < 0) return;
+    void handleAction(choice.kind, choice.needsTarget ? defaultTargetIdx : undefined);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-abyss-void text-white">
-      {/* Backdrop — cinematic scene rendered FULL-SIZE with smooth
-          scaling so the painted detail stays readable. */}
+      {/* Cinematic backdrop. */}
       <div className="pointer-events-none absolute inset-0">
         {backdropUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -235,21 +248,21 @@ export function CombatOverlay({
             src={backdropUrl}
             alt=""
             className="h-full w-full object-cover"
-            style={{ filter: "brightness(0.72) saturate(0.95)" }}
+            style={{ filter: "brightness(0.7) saturate(0.9)" }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/40 to-abyss-coal/75" />
+        <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/40 to-abyss-coal/70" />
       </div>
 
-      {/* Battlefield: all 3 entities in one horizontal row sharing
-          a baseline (FF VI / Octopath convention). Enemies grouped
-          LEFT, player on the RIGHT — the row evenly distributes the
-          available width via justify-around so the player slot is
-          never crowded out on narrow mobile viewports. */}
+      {/* Battlefield — FFVI / Chrono Trigger composition: enemies
+          clustered LEFT (anchored to the left edge with breathing
+          room), player anchored RIGHT in its own column. Sprites are
+          intentionally BIG (max-w 240/260 + aspect-square) so the
+          art reads at proper combat scale. */}
       <div className="relative flex-1">
-        <div className="absolute inset-x-0 bottom-2 top-10 flex items-end justify-around gap-2 px-2">
-          {/* Enemies (LEFT) — render each one as a flex-1 slot so they
-              compress together to leave room for the player slot. */}
+        <div className="absolute inset-x-0 bottom-1 top-4 flex items-end gap-3 px-3">
+          {/* Enemy cluster — takes the LEFT 60% of the row. */}
+          <div className="flex flex-[3] items-end justify-start gap-2 pb-2 pl-1">
           {session.mobs.map((m, idx) => {
             const mobMeta = mobs[idx];
             const key = `mob:${idx}`;
@@ -270,8 +283,8 @@ export function CombatOverlay({
               mobMeta?.animation_atlas ??
               null;
             return (
-              <div key={idx} className="flex min-w-0 flex-1 flex-col items-center gap-1 pb-2">
-                <div className="relative aspect-square w-full max-w-[180px]">
+              <div key={idx} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                <div className="relative aspect-square w-full max-w-[240px]">
                   <CharacterStage
                     baseSprite={baseSprite}
                     atlas={atlas}
@@ -279,6 +292,7 @@ export function CombatOverlay({
                     state={state}
                     flash={isHit}
                     grayscale={!m.alive}
+                    flipFallback={MOB_SPRITE_FLIP[m.id] ?? false}
                     debugLabel={m.name}
                   />
                   {floats
@@ -287,21 +301,28 @@ export function CombatOverlay({
                       <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
                     ))}
                 </div>
-                <EntityBar
-                  label={mobMeta?.name_localized ?? m.name}
-                  hp={m.hp}
-                  hpMax={m.max_hp}
-                  mp={null}
-                  mpMax={null}
-                  isCurrentActor={currentTurn.kind === "mob" && currentTurn.idx === idx}
-                />
+                {/* Tiny floating HP bar over each enemy — kept minimal
+                    so the FFVI command box stays the focus of the HUD. */}
+                <div className="w-full max-w-[180px]">
+                  <div className="flex items-baseline justify-between text-[10px] font-semibold text-white drop-shadow">
+                    <span className="truncate">{mobMeta?.name_localized ?? m.name}</span>
+                    <span className="tabular-nums text-abyss-fog">{m.hp}/{m.max_hp}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded bg-abyss-coal/70 ring-1 ring-white/30">
+                    <div
+                      className="h-full bg-rose-500 transition-all duration-300"
+                      style={{ width: `${m.max_hp > 0 ? Math.max(0, (m.hp / m.max_hp) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             );
           })}
+          </div>
 
-          {/* Player (RIGHT) — same flex-1 slot so the row balances. */}
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-1 pb-2">
-            <div className="relative aspect-square w-full max-w-[200px]">
+          {/* Player — anchored RIGHT in its own column. */}
+          <div className="flex flex-[2] flex-col items-end justify-end gap-1 pb-2 pr-2">
+            <div className="relative aspect-square w-full max-w-[260px]">
               {(() => {
                 const csWest = player.combat_sprite_atlas?.west ?? null;
                 const csEast = player.combat_sprite_atlas?.east ?? null;
@@ -329,92 +350,101 @@ export function CombatOverlay({
                   <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
                 ))}
             </div>
-            <EntityBar
-              label={player.name}
-              hp={session.player_hp}
-              hpMax={session.player_max_hp}
-              mp={player.mp_current}
-              mpMax={player.mp_max_effective}
-              isCurrentActor={currentTurn.kind === "player" && !session.is_over}
-            />
-            <p className="text-[9px] uppercase tracking-widest text-abyss-fog">
-              Nv.{player.level} · {player.class_name}
-            </p>
           </div>
         </div>
       </div>
 
-      {/* Combat log strip */}
-      <div className="relative border-t border-abyss-coal/80 bg-abyss-void/85 px-3 py-2 backdrop-blur">
-        <div className="max-h-16 overflow-y-auto text-[10px] leading-tight">
-          {recentLog.length === 0 ? (
-            <p className="text-abyss-fog/70 italic">{t(locale, "combat.log_empty")}</p>
-          ) : (
-            recentLog.map((line, i) => (
-              <p key={i} className={line.tone}>{line.text}</p>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Action menu — 4 actions per the user's extended set. */}
-      {!session.is_over ? (
-        <div className="relative border-t-2 border-abyss-soul/60 bg-abyss-deep/95 px-3 py-3 backdrop-blur">
-          <div className="grid grid-cols-4 gap-2">
-            <ActionButton
-              label={t(locale, "combat.action_attack")}
-              color="amber"
-              disabled={busy || playing || currentTurn.kind !== "player" || defaultTargetIdx < 0}
-              onClick={() => handleAction("attack", defaultTargetIdx)}
-            />
-            <ActionButton
-              label={t(locale, "combat.action_skill")}
-              color="violet"
-              disabled={busy || playing || currentTurn.kind !== "player" || defaultTargetIdx < 0}
-              onClick={() => handleAction("skill", defaultTargetIdx)}
-            />
-            <ActionButton
-              label={t(locale, "combat.action_defend")}
-              color="sky"
-              disabled={busy || playing || currentTurn.kind !== "player"}
-              onClick={() => handleAction("defend")}
-            />
-            <ActionButton
-              label={t(locale, "combat.action_dodge")}
-              color="emerald"
-              disabled={busy || playing || currentTurn.kind !== "player"}
-              onClick={() => handleAction("dodge")}
-            />
+      {/* FFVI-style bottom HUD: two blue-gradient boxes with white
+          rounded borders. LEFT = command list with the blinking
+          pointing glove. RIGHT = active party panel. */}
+      <div className="relative grid grid-cols-2 gap-3 px-3 pb-3">
+        <FFVIBox>
+          <div className="flex flex-col gap-1.5">
+            {ACTIONS.map((a, idx) => {
+              const isSelected = idx === actionIdx;
+              const disabled =
+                !isPlayerTurn || (a.needsTarget && defaultTargetIdx < 0);
+              return (
+                <button
+                  key={a.kind}
+                  type="button"
+                  disabled={disabled}
+                  onMouseEnter={() => setActionIdx(idx)}
+                  onClick={() => {
+                    setActionIdx(idx);
+                    if (!disabled) triggerSelectedAction();
+                  }}
+                  className={
+                    "flex items-center gap-2 rounded px-1.5 py-1 text-left text-[14px] font-bold uppercase tracking-widest transition-colors disabled:opacity-40 " +
+                    (isSelected
+                      ? "text-amber-300"
+                      : "text-white hover:text-amber-200")
+                  }
+                  style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+                >
+                  <PointingGlove
+                    visible={isSelected}
+                    blinking={isPlayerTurn}
+                  />
+                  <span>{t(locale, a.labelKey)}</span>
+                </button>
+              );
+            })}
           </div>
-          {session.mobs.filter((m) => m.alive).length > 1 ? (
-            <div className="mt-2 flex gap-2">
-              {session.mobs.map((m, idx) =>
-                m.alive ? (
-                  <button
-                    key={idx}
-                    type="button"
-                    disabled={busy || playing || currentTurn.kind !== "player"}
-                    onClick={() => handleAction("attack", idx)}
-                    className="flex-1 rounded border border-abyss-soul/60 bg-abyss-coal/80 px-2 py-1 text-[10px] uppercase tracking-widest hover:bg-abyss-soul/20 disabled:opacity-40"
-                  >
-                    → {mobs[idx]?.name_localized ?? m.name}
-                  </button>
-                ) : null,
-              )}
+        </FFVIBox>
+
+        <FFVIBox>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between">
+              <span
+                className="truncate text-[14px] font-bold uppercase tracking-widest text-white"
+                style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+              >
+                {player.name}
+              </span>
+              <span
+                className="text-[11px] uppercase tracking-widest text-amber-200"
+                style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+              >
+                Nv.{player.level}
+              </span>
             </div>
-          ) : null}
-          <div className="mt-1 text-center text-[10px] text-abyss-fog">
-            {playing
-              ? t(locale, "combat.resolving")
-              : currentTurn.kind === "player"
-                ? t(locale, "combat.your_turn")
-                : t(locale, "combat.enemy_turn")}
+            <p
+              className="-mt-1 text-[10px] uppercase tracking-widest text-sky-200"
+              style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+            >
+              {player.class_name}
+            </p>
+            <StatBar
+              label="PV"
+              tone="hp"
+              value={session.player_hp}
+              max={session.player_max_hp}
+            />
+            {player.mp_max_effective > 0 ? (
+              <StatBar
+                label="PM"
+                tone="mp"
+                value={player.mp_current}
+                max={player.mp_max_effective}
+              />
+            ) : null}
+            <div
+              className="mt-1 text-center text-[10px] uppercase tracking-widest text-white/70"
+              style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+            >
+              {playing
+                ? t(locale, "combat.resolving")
+                : isPlayerTurn
+                  ? t(locale, "combat.your_turn")
+                  : t(locale, "combat.enemy_turn")}
+            </div>
+            {error ? (
+              <p className="text-center text-[10px] text-rose-300">{error}</p>
+            ) : null}
           </div>
-          {error ? (
-            <p className="mt-2 text-center text-[10px] text-rose-400">{error}</p>
-          ) : null}
-        </div>
-      ) : null}
+        </FFVIBox>
+      </div>
 
       {showOutcomeCard && session.outcome ? (
         <OutcomeCard
@@ -428,41 +458,97 @@ export function CombatOverlay({
   );
 }
 
-/** Action button with a single-color theme (used in the 4-button row). */
-function ActionButton({
-  label,
-  color,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  color: "amber" | "violet" | "sky" | "emerald";
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  const bg: Record<typeof color, string> = {
-    amber:   "bg-amber-500/90 hover:bg-amber-500 text-abyss-void",
-    violet:  "bg-violet-500/90 hover:bg-violet-500 text-white",
-    sky:     "bg-sky-500/90 hover:bg-sky-500 text-white",
-    emerald: "bg-emerald-500/90 hover:bg-emerald-500 text-abyss-void",
-  };
+/** FFVI-style command box — blue gradient fill, white rounded border,
+ *  drop shadow. Reusable for the command list + party panel. */
+function FFVIBox({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`rounded px-2 py-2.5 text-[11px] font-bold uppercase tracking-widest disabled:opacity-40 ${bg[color]}`}
+    <div
+      className="rounded-lg p-2.5 shadow-xl"
+      style={{
+        background: "linear-gradient(180deg, #2a52c7 0%, #0a1a5e 100%)",
+        border: "2px solid rgba(255,255,255,0.92)",
+        boxShadow: "0 0 0 1px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.45) inset 0 1px 0 rgba(255,255,255,0.18)",
+      }}
     >
-      {label}
-    </button>
+      {children}
+    </div>
   );
 }
 
-/**
- * Renders a character sprite + plays the state-appropriate animation.
- * Loop states cycle forever; one-shot states run their frames once and
- * the parent flips the state back to 'idle' afterward. Hold states
- * (death, block) stay on the last frame until parent changes state.
+/** HP / MP bar styled to match the FFVI panel: numeric readout on
+ *  one line, bar below, tinted glow at the right edge. */
+function StatBar({
+  label,
+  tone,
+  value,
+  max,
+}: {
+  label: string;
+  tone: "hp" | "mp";
+  value: number;
+  max: number;
+}) {
+  const pct = max > 0 ? Math.max(0, (value / max) * 100) : 0;
+  const barColor = tone === "hp" ? "bg-rose-400" : "bg-sky-300";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-baseline justify-between text-[10px] tabular-nums">
+        <span
+          className={"font-bold uppercase tracking-widest " + (tone === "hp" ? "text-rose-200" : "text-sky-200")}
+          style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+        >
+          {label}
+        </span>
+        <span className="text-white" style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}>
+          {value} / {max}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded bg-black/40 ring-1 ring-white/20">
+        <div className={"h-full transition-all duration-300 " + barColor} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** Blinking pointing-glove cursor — FFVI signature. Stays visible
+ *  next to the currently-selected action when it's the player's turn;
+ *  goes invisible when the enemy is acting. */
+function PointingGlove({ visible, blinking }: { visible: boolean; blinking: boolean }) {
+  if (!visible) return <span className="inline-block w-4" />;
+  return (
+    <span
+      className="inline-block w-4 text-amber-300"
+      style={{
+        animation: blinking ? "abyssCursorBlink 0.7s steps(2) infinite" : undefined,
+      }}
+    >
+      <svg
+        viewBox="0 0 16 16"
+        fill="currentColor"
+        className="h-4 w-4 drop-shadow-[1px_1px_0_rgba(0,0,0,0.8)]"
+        aria-hidden
+      >
+        {/* Stubby pointing hand silhouette, pixel-art friendly */}
+        <path d="M3 4h1v1h1v1h1v1h1v1h7v1h-1v1h1v1h-1v1h-7v1h-1v-1h-1v-1h-1v-1h-1V8h-1V5h1V4z" />
+      </svg>
+      <style>{`
+        @keyframes abyssCursorBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.15; }
+        }
+      `}</style>
+    </span>
+  );
+}
+
+/** Renders a character sprite + plays the state-appropriate frames.
+ *
+ *  Bulletproof stepper:
+ *    - keeps frame index in a useRef so the interval callback always
+ *      sees the latest counter without stale-closure problems
+ *    - resets to frame 0 every time `state` changes
+ *    - resolves frames lazily so falling back to idle when a state's
+ *      frames don't exist is transparent
  */
 function CharacterStage({
   baseSprite,
@@ -480,144 +566,71 @@ function CharacterStage({
   state: AnimState;
   flash: boolean;
   grayscale: boolean;
-  /** Set true when baseSprite is a top-down rotation and we need to
-   *  flip it horizontally so the character faces toward the centre. */
   flipFallback?: boolean;
-  /** Shown as a placeholder if no sprite resolved — helps QA spot
-   *  data-flow regressions like "atlas missing in DB". */
   debugLabel?: string;
 }) {
-  const stateFrames = atlas?.[state]?.[facing] ?? null;
-  // For one-shot states (attack / hurt / dodge etc.) fall back to the
-  // idle frames so the character is never invisible when only idle is
-  // populated. This was the previous regression — picking a state
-  // whose key wasn't in the atlas gave null frames → null src → empty box.
-  const idleFrames = atlas?.idle?.[facing] ?? null;
-  const playFrames = stateFrames ?? idleFrames ?? null;
+  const directFrames = atlas?.[state]?.[facing] ?? null;
+  // Fall back to idle frames when the state itself has none — keeps the
+  // character visible while still animating in place.
+  const fallbackFrames = atlas?.idle?.[facing] ?? null;
+  const frames = directFrames ?? fallbackFrames ?? null;
   const hint = ANIM_HINT[state];
-  const [frameIdx, setFrameIdx] = useState(0);
 
-  // Reset to frame 0 when state changes.
+  const [frameIdx, setFrameIdx] = useState(0);
+  const frameIdxRef = useRef(0);
+
+  // Reset to frame 0 every time the state changes so a swing always
+  // starts from the wind-up frame.
   useEffect(() => {
+    frameIdxRef.current = 0;
     setFrameIdx(0);
   }, [state]);
 
   useEffect(() => {
-    if (!playFrames || playFrames.length <= 1) return;
-    let cancelled = false;
-    let i = 0;
-    const interval = window.setInterval(() => {
-      if (cancelled) return;
-      const last = playFrames.length - 1;
-      if (i < last) {
-        i += 1;
-        setFrameIdx(i);
+    if (!frames || frames.length <= 1) return;
+    const intervalMs = Math.max(40, Math.round(1000 / hint.fps));
+    const id = window.setInterval(() => {
+      const last = frames.length - 1;
+      const cur = frameIdxRef.current;
+      if (cur < last) {
+        frameIdxRef.current = cur + 1;
+        setFrameIdx(cur + 1);
       } else if (hint.loop) {
-        i = 0;
+        frameIdxRef.current = 0;
         setFrameIdx(0);
       } else if (hint.hold) {
-        // Stay on last frame.
+        // Stay on last frame; parent will change state to leave.
       } else {
-        // One-shot finished; parent will transition us back to idle.
-        window.clearInterval(interval);
+        window.clearInterval(id);
       }
-    }, Math.max(40, Math.round(1000 / hint.fps)));
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [playFrames, hint.fps, hint.loop, hint.hold]);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [frames, hint.fps, hint.loop, hint.hold]);
 
   const src =
-    playFrames && playFrames.length > 0
-      ? (playFrames[Math.min(frameIdx, playFrames.length - 1)] ?? baseSprite ?? "")
+    frames && frames.length > 0
+      ? (frames[Math.min(frameIdx, frames.length - 1)] ?? baseSprite ?? "")
       : (baseSprite ?? "");
   if (!src) {
-    // Defensive fallback so QA can see WHERE the character would be
-    // even when the assets failed to populate. Won't normally render.
     return (
       <div className="flex h-full w-full items-center justify-center rounded border border-dashed border-rose-500/60 bg-abyss-coal/50 text-[10px] text-rose-300">
         {debugLabel ?? "no sprite"}
       </div>
     );
   }
-  const transforms: string[] = [];
-  if (flipFallback) transforms.push("scaleX(-1)");
-  const transform = transforms.length > 0 ? transforms.join(" ") : undefined;
+  const transform = flipFallback ? "scaleX(-1)" : undefined;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt=""
       className={
-        "h-full w-full object-contain transition-[filter,transform] duration-150 " +
+        "h-full w-full object-contain transition-[filter] duration-150 " +
         (flash ? "brightness-200 " : "") +
         (grayscale ? "opacity-30 grayscale " : "")
       }
       style={{ imageRendering: "pixelated", transform }}
     />
-  );
-}
-
-/** HP (red) + optional MP (cyan) bars + name + current-actor ring. */
-function EntityBar({
-  label,
-  hp,
-  hpMax,
-  mp,
-  mpMax,
-  isCurrentActor,
-}: {
-  label: string;
-  hp: number;
-  hpMax: number;
-  mp: number | null;
-  mpMax: number | null;
-  isCurrentActor: boolean;
-}) {
-  const hpPct = hpMax > 0 ? Math.max(0, (hp / hpMax) * 100) : 0;
-  const mpPct = mp !== null && mpMax !== null && mpMax > 0
-    ? Math.max(0, (mp / mpMax) * 100)
-    : 0;
-  return (
-    <div
-      className={
-        "w-full max-w-[160px] rounded border bg-abyss-void/80 px-1.5 py-1 backdrop-blur " +
-        (isCurrentActor ? "border-amber-400 ring-1 ring-amber-400/60" : "border-abyss-coal/70")
-      }
-    >
-      <p className="truncate text-[11px] font-semibold text-white">{label}</p>
-      <div className="mt-0.5 flex items-center gap-1">
-        <span className="w-5 text-[8px] uppercase tracking-widest text-rose-300">PV</span>
-        <div className="flex-1">
-          <div className="h-1.5 w-full overflow-hidden rounded bg-abyss-coal/70">
-            <div
-              className="h-full bg-rose-500 transition-all duration-300"
-              style={{ width: `${hpPct}%` }}
-            />
-          </div>
-        </div>
-        <span className="min-w-[44px] text-right text-[9px] tabular-nums text-abyss-fog">
-          {hp}/{hpMax}
-        </span>
-      </div>
-      {mp !== null && mpMax !== null ? (
-        <div className="mt-0.5 flex items-center gap-1">
-          <span className="w-5 text-[8px] uppercase tracking-widest text-sky-300">PM</span>
-          <div className="flex-1">
-            <div className="h-1.5 w-full overflow-hidden rounded bg-abyss-coal/70">
-              <div
-                className="h-full bg-sky-400 transition-all duration-300"
-                style={{ width: `${mpPct}%` }}
-              />
-            </div>
-          </div>
-          <span className="min-w-[44px] text-right text-[9px] tabular-nums text-abyss-fog">
-            {mp}/{mpMax}
-          </span>
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -695,55 +708,4 @@ function OutcomeCard({
       </div>
     </div>
   );
-}
-
-function formatLogEntry(
-  entry: CombatLogEntry,
-  locale: Locale,
-  mobs: { id: string; name: string }[],
-  encounterMobs: { name_localized: string }[],
-): { text: string; tone: string } {
-  function actorName(actor: string): string {
-    if (actor === "player") return t(locale, "combat.actor_you");
-    const m = actor.match(/^mob:(\d+)$/);
-    if (m) {
-      const idx = Number(m[1]);
-      return encounterMobs[idx]?.name_localized ?? mobs[idx]?.name ?? actor;
-    }
-    return actor;
-  }
-  switch (entry.kind) {
-    case "attack": {
-      const actor = actorName(entry.actor);
-      const target = actorName(entry.target);
-      const tone = entry.actor === "player" ? "text-amber-200" : "text-rose-300";
-      const key = entry.action_kind === "skill" ? "combat.log_skill" : "combat.log_attack";
-      return {
-        text: t(locale, key, { actor, target, dmg: entry.dmg }),
-        tone,
-      };
-    }
-    case "miss":
-      return {
-        text: t(locale, "combat.log_miss", { actor: actorName(entry.actor), target: actorName(entry.target) }),
-        tone: "text-sky-300",
-      };
-    case "stance":
-      return {
-        text: t(locale, entry.mode === "defending" ? "combat.log_defend" : "combat.log_dodge_ready"),
-        tone: "text-emerald-300 italic",
-      };
-    case "death":
-      return {
-        text: t(locale, "combat.log_death", { actor: actorName(entry.actor) }),
-        tone: "text-abyss-fog italic",
-      };
-    case "victory":
-      return {
-        text: t(locale, "combat.log_victory", { exp: entry.exp_awarded, khryn: entry.khryn_awarded }),
-        tone: "text-amber-300 font-bold",
-      };
-    case "defeat":
-      return { text: t(locale, "combat.log_defeat"), tone: "text-rose-400 font-bold" };
-  }
 }
