@@ -277,6 +277,7 @@ export function CombatOverlay({
                       state={state}
                       flash={isHit}
                       grayscale={!m.alive}
+                      debugLabel={m.name}
                     />
                     {floats
                       .filter((f) => f.target === key)
@@ -301,23 +302,36 @@ export function CombatOverlay({
           <div className="flex flex-1 items-end justify-around pb-2">
             <div className="flex flex-col items-center gap-1">
               <div className="relative h-56 w-56 sm:h-64 sm:w-64">
-                <CharacterStage
-                  baseSprite={
-                    player.combat_sprite_atlas?.west ??
-                    player.combat_sprite_atlas?.east ??
-                    player.sprite_atlas?.south ??
-                    null
-                  }
-                  atlas={player.combat_animation_atlas ?? player.animation_atlas ?? null}
-                  facing="west"
-                  // If the only available sprite is the top-down south
-                  // exploration sprite, flip horizontally so the player
-                  // faces the enemies (they're on the LEFT).
-                  flipFallback={!player.combat_sprite_atlas?.west}
-                  state={animStates["player"] ?? "idle"}
-                  flash={hitFlash.has("player")}
-                  grayscale={false}
-                />
+                {(() => {
+                  // Player sprite resolution priority:
+                  //   1. combat_sprite_atlas.west (proper side-view)
+                  //   2. combat_sprite_atlas.east flipped
+                  //   3. top-down south flipped (last-ditch)
+                  const csWest = player.combat_sprite_atlas?.west ?? null;
+                  const csEast = player.combat_sprite_atlas?.east ?? null;
+                  const topSouth = player.sprite_atlas?.south ?? null;
+                  const baseSprite = csWest ?? csEast ?? topSouth ?? null;
+                  // If atlas has the WEST frames use them; if only east
+                  // frames exist, the combat_animation_atlas is keyed
+                  // east — we flip CSS for the player slot. Otherwise
+                  // fall back to top-down animation_atlas.idle.south
+                  // (still better than a static frame).
+                  const combatAtlasHasWest = !!player.combat_animation_atlas?.idle?.west;
+                  const facing: "east" | "west" = combatAtlasHasWest ? "west" : "east";
+                  const flip = !combatAtlasHasWest && (!!csEast || !!topSouth || !!player.combat_animation_atlas);
+                  return (
+                    <CharacterStage
+                      baseSprite={baseSprite}
+                      atlas={player.combat_animation_atlas ?? player.animation_atlas ?? null}
+                      facing={facing}
+                      flipFallback={flip}
+                      state={animStates["player"] ?? "idle"}
+                      flash={hitFlash.has("player")}
+                      grayscale={false}
+                      debugLabel={player.name}
+                    />
+                  );
+                })()}
                 {floats
                   .filter((f) => f.target === "player")
                   .map((f) => (
@@ -468,6 +482,7 @@ function CharacterStage({
   flash,
   grayscale,
   flipFallback,
+  debugLabel,
 }: {
   baseSprite: string | null;
   atlas: Record<string, Record<string, string[]>> | null;
@@ -478,8 +493,17 @@ function CharacterStage({
   /** Set true when baseSprite is a top-down rotation and we need to
    *  flip it horizontally so the character faces toward the centre. */
   flipFallback?: boolean;
+  /** Shown as a placeholder if no sprite resolved — helps QA spot
+   *  data-flow regressions like "atlas missing in DB". */
+  debugLabel?: string;
 }) {
   const stateFrames = atlas?.[state]?.[facing] ?? null;
+  // For one-shot states (attack / hurt / dodge etc.) fall back to the
+  // idle frames so the character is never invisible when only idle is
+  // populated. This was the previous regression — picking a state
+  // whose key wasn't in the atlas gave null frames → null src → empty box.
+  const idleFrames = atlas?.idle?.[facing] ?? null;
+  const playFrames = stateFrames ?? idleFrames ?? null;
   const hint = ANIM_HINT[state];
   const [frameIdx, setFrameIdx] = useState(0);
 
@@ -489,12 +513,12 @@ function CharacterStage({
   }, [state]);
 
   useEffect(() => {
-    if (!stateFrames || stateFrames.length <= 1) return;
+    if (!playFrames || playFrames.length <= 1) return;
     let cancelled = false;
     let i = 0;
     const interval = window.setInterval(() => {
       if (cancelled) return;
-      const last = stateFrames.length - 1;
+      const last = playFrames.length - 1;
       if (i < last) {
         i += 1;
         setFrameIdx(i);
@@ -512,13 +536,21 @@ function CharacterStage({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [stateFrames, hint.fps, hint.loop, hint.hold]);
+  }, [playFrames, hint.fps, hint.loop, hint.hold]);
 
   const src =
-    stateFrames && stateFrames.length > 0
-      ? (stateFrames[Math.min(frameIdx, stateFrames.length - 1)] ?? baseSprite ?? "")
+    playFrames && playFrames.length > 0
+      ? (playFrames[Math.min(frameIdx, playFrames.length - 1)] ?? baseSprite ?? "")
       : (baseSprite ?? "");
-  if (!src) return null;
+  if (!src) {
+    // Defensive fallback so QA can see WHERE the character would be
+    // even when the assets failed to populate. Won't normally render.
+    return (
+      <div className="flex h-full w-full items-center justify-center rounded border border-dashed border-rose-500/60 bg-abyss-coal/50 text-[10px] text-rose-300">
+        {debugLabel ?? "no sprite"}
+      </div>
+    );
+  }
   const transforms: string[] = [];
   if (flipFallback) transforms.push("scaleX(-1)");
   const transform = transforms.length > 0 ? transforms.join(" ") : undefined;
