@@ -70,12 +70,12 @@ const ACTIONS: { kind: PlayerActionKind; labelKey: string; needsTarget: boolean 
   { kind: "dodge",  labelKey: "combat.action_dodge",  needsTarget: false },
 ];
 
-/** Some enemy sprites read facing the WRONG way because the PixelLab
- *  generation interpreted "east" in mirror. Toggle per-mob until we
- *  regenerate the corrected art. */
+/** Per-mob horizontal flip when a generation's east rotation reads
+ *  mirrored. The v2 PixelLab art generated for centaur + lizardman
+ *  faces RIGHT naturally so no flip needed; the map is kept as a
+ *  hook for future mobs whose generated east still reads wrong. */
 const MOB_SPRITE_FLIP: Record<string, boolean> = {
-  centaur_warrior: true,
-  // lizardman_archer faces the right way at default east.
+  // centaur_warrior: false (v2 sprite faces right correctly)
 };
 
 type Props = {
