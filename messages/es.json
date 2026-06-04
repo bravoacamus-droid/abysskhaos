@@ -93,6 +93,13 @@
   "combat": {
     "encounter_title": "¡Emboscada!",
     "action_attack": "Atacar",
+    "action_skill": "Habilidad",
+    "action_defend": "Defender",
+    "action_dodge": "Esquivar",
+    "log_skill": "{actor} usa Golpe Pesado contra {target} — {dmg} de daño",
+    "log_miss": "{actor} ataca a {target} — ¡fallido!",
+    "log_defend": "Te preparas para defender",
+    "log_dodge_ready": "Te preparas para esquivar",
     "your_turn": "Tu turno",
     "enemy_turn": "Turno enemigo",
     "resolving": "Resolviendo…",

@@ -93,6 +93,13 @@
   "combat": {
     "encounter_title": "Ambush!",
     "action_attack": "Attack",
+    "action_skill": "Skill",
+    "action_defend": "Defend",
+    "action_dodge": "Dodge",
+    "log_skill": "{actor} uses Heavy Strike on {target} — {dmg} dmg",
+    "log_miss": "{actor} attacks {target} — miss!",
+    "log_defend": "You brace to defend",
+    "log_dodge_ready": "You ready to dodge",
     "your_turn": "Your turn",
     "enemy_turn": "Enemy turn",
     "resolving": "Resolving…",

@@ -4,9 +4,10 @@ import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { buildRoomStateForCharacter, roomStateErrorResponse } from "@/lib/server/room-state";
 import {
-  applyPlayerAttack,
+  applyPlayerAction,
   finalizeCombat,
   type CombatSessionState,
+  type PlayerActionKind,
 } from "@/lib/server/combat";
 
 export const runtime = "nodejs";
@@ -50,10 +51,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (typeof body.session_id !== "string") {
     return NextResponse.json({ error: "MISSING_SESSION_ID" }, { status: 400 });
   }
-  if (body.action !== "attack") {
+  const VALID_ACTIONS: PlayerActionKind[] = ["attack", "skill", "defend", "dodge"];
+  if (!VALID_ACTIONS.includes(body.action as PlayerActionKind)) {
     return NextResponse.json({ error: "UNSUPPORTED_ACTION" }, { status: 400 });
   }
-  if (typeof body.target_mob_idx !== "number") {
+  const actionKind = body.action as PlayerActionKind;
+  // attack + skill require a target; defend + dodge don't.
+  if ((actionKind === "attack" || actionKind === "skill") && typeof body.target_mob_idx !== "number") {
     return NextResponse.json({ error: "MISSING_TARGET" }, { status: 400 });
   }
 
@@ -97,12 +101,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   let next: CombatSessionState;
   let appended: CombatSessionState["log_entries"];
   try {
-    const result = applyPlayerAttack(current, { targetMobIdx: body.target_mob_idx });
+    const result = applyPlayerAction(current, {
+      action: actionKind,
+      targetMobIdx:
+        typeof body.target_mob_idx === "number" ? body.target_mob_idx : undefined,
+    });
     next = result.next;
     appended = result.appended;
   } catch (e) {
     const code = (e as Error).message;
-    const status = code === "NOT_PLAYER_TURN" || code === "INVALID_TARGET" || code === "COMBAT_OVER" ? 409 : 400;
+    const status = code === "NOT_PLAYER_TURN" || code === "INVALID_TARGET" || code === "COMBAT_OVER" || code === "MISSING_TARGET" ? 409 : 400;
     return NextResponse.json({ error: code }, { status });
   }
 

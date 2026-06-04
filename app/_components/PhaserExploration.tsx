@@ -15,6 +15,7 @@ import {
   unequipItem,
   type CombatLogEntry,
   type CombatSession,
+  type PlayerActionKind,
   type Direction,
   type EquippedSlot,
   type EncounterMob,
@@ -416,7 +417,10 @@ export default function PhaserExploration({
     }
   }
 
-  async function doCombatAttack(targetMobIdx: number): Promise<{
+  async function doCombatAction(
+    action: PlayerActionKind,
+    targetMobIdx?: number,
+  ): Promise<{
     nextSession: CombatSession;
     appended: CombatLogEntry[];
   }> {
@@ -426,14 +430,10 @@ export default function PhaserExploration({
       initData,
       characterId,
       sessionId: enc.session.id,
-      action: "attack",
+      action,
       targetMobIdx,
       locale,
     });
-    // The /combat/action response also brings the latest RoomState
-    // (used after the overlay closes on victory / defeat — by then
-    // server-side finalizeCombat has already applied rewards or
-    // respawn). Stash it for closeCombat to read.
     stateRef.current = resp.room_state;
     setState(resp.room_state);
     setEncounterCutscene({ ...enc, session: resp.session });
@@ -768,7 +768,7 @@ export default function PhaserExploration({
             // room's biome wall tile (less atmospheric but always
             // available).
             backdropUrl={encounterCutscene.backdropUrl ?? state.background_tile_url}
-            onAttack={doCombatAttack}
+            onAction={doCombatAction}
             onClose={closeCombat}
           />
         ) : null}

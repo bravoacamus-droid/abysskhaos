@@ -529,8 +529,12 @@ export type CombatMobState = {
 
 export type CombatTurn = { kind: "player" } | { kind: "mob"; idx: number };
 
+export type PlayerActionKind = "attack" | "skill" | "defend" | "dodge";
+
 export type CombatLogEntry =
-  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number }
+  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number; action_kind?: "attack" | "skill" }
+  | { turn: number; kind: "miss"; actor: string; target: "player" | string; reason: "dodged" }
+  | { turn: number; kind: "stance"; actor: "player"; mode: "defending" | "dodging" }
   | { turn: number; kind: "death"; actor: string }
   | { turn: number; kind: "victory"; exp_awarded: number; khryn_awarded: number }
   | { turn: number; kind: "defeat" };
@@ -566,8 +570,8 @@ export function sendCombatAction(
   opts: FetchOpts & {
     characterId: string;
     sessionId: string;
-    action: "attack";
-    targetMobIdx: number;
+    action: PlayerActionKind;
+    targetMobIdx?: number;
     locale: string;
   },
 ): Promise<{ session: CombatSession; appended: CombatLogEntry[]; room_state: RoomState }> {

@@ -8,67 +8,74 @@ import type {
   CombatSession,
   CombatTurn,
   EncounterMob,
+  PlayerActionKind,
   RoomState,
 } from "@/lib/client/api";
 
 /**
- * Phase 4b side-view combat overlay (FF VI / Chrono Trigger / Octopath
- * inspired). Full-screen React component.
+ * Phase 4d combat overlay — side-view battle in the FF VI / Octopath
+ * tradition. Each entity (player + each alive mob) is rendered through
+ * <CharacterStage> which knows how to:
+ *   - loop the idle (breathing) frames forever
+ *   - play one-shot animations (attack, skill, hurt, dodge, block) and
+ *     return to idle when done
+ *   - hold terminal animations (death, victory) on the last frame
  *
- * Layout: enemies LEFT row, player RIGHT — horizontal facing-each-other
- * just like the references. Backdrop is a darkened blurred image of the
- * current room biome (cave) so the combat reads as "in the world", not
- * "on a blank screen".
+ * After every /combat/action response the parent walks the appended
+ * log entries (attack, miss, stance, death, victory, defeat) and
+ * SCHEDULES the matching state transition per entity, then plays back
+ * in real time so the player sees the swing connect, the target flinch,
+ * mobs counter, etc.
  *
- * Sprites: enemies use east-facing rotation (looking right toward the
- * player); player uses south-facing flipped horizontally (warrior
- * standing tall, weapon-side toward enemies). All idle sprites that
- * have a `breathing-idle` animation atlas registered loop it; combat
- * actions trigger a transient flash + position shake + floating
- * damage number for now. The PixelLab attack-animation frames land
- * in a follow-up commit.
- *
- * HUD: HP red bar + MP cyan bar per entity; current actor gets a
- * subtle gold ring. Combat log strip at the bottom (last 6 lines);
- * action menu pinned bottom-right.
- *
- * Server is authoritative — see lib/server/combat.ts; this component
- * only POSTs intents via onAttack(idx) and animates whatever entries
- * come back in `appended`.
+ * Server is authoritative: dmg / hp / dodge roll all come pre-decided
+ * in `appended`; this component only animates them.
  */
 
 type FloatingNumber = {
   id: number;
   /** "player" or "mob:idx" */
   target: string;
-  value: number;
+  value: number | "MISS";
   variant: "damage" | "miss";
+};
+
+type AnimState =
+  | "idle"
+  | "attack"
+  | "skill"
+  | "hurt"
+  | "dodge"
+  | "block"
+  | "death"
+  | "victory";
+
+/** Per-state hint that drives <CharacterStage> playback. */
+const ANIM_HINT: Record<AnimState, { fps: number; loop: boolean; hold: boolean }> = {
+  idle:    { fps: 6,  loop: true,  hold: false },
+  attack:  { fps: 14, loop: false, hold: false },
+  skill:   { fps: 12, loop: false, hold: false },
+  hurt:    { fps: 14, loop: false, hold: false },
+  dodge:   { fps: 16, loop: false, hold: false },
+  block:   { fps: 10, loop: false, hold: true  },
+  death:   { fps: 10, loop: false, hold: true  },
+  victory: { fps: 8,  loop: true,  hold: false },
 };
 
 type Props = {
   locale: Locale;
-  /** Server-authoritative session state. */
   session: CombatSession;
-  /** Player's sprite atlas + vitals for the right-side party panel. */
   player: RoomState["player"];
-  /** Enriched mob metadata for the upper UI (names already localized
-   *  + animation_atlas references). */
   mobs: EncounterMob[];
-  /** Optional URL of a backdrop image (room's biome tile, blurred via
-   *  CSS). Falls back to the dark gradient when null. */
   backdropUrl: string | null;
-  /** Submitted by the user — UI is disabled until resolved. */
-  onAttack: (targetMobIdx: number) => Promise<{
-    nextSession: CombatSession;
-    appended: CombatLogEntry[];
-  }>;
-  /** Fired after the player taps "Continue" on the victory / defeat
-   *  card so the parent can fade the overlay + reload room state. */
+  onAction: (
+    action: PlayerActionKind,
+    targetMobIdx?: number,
+  ) => Promise<{ nextSession: CombatSession; appended: CombatLogEntry[] }>;
   onClose: (outcome: "victory" | "defeat") => void;
 };
 
 const HIT_FLASH_MS = 320;
-const FLOAT_LIFETIME_MS = 1000;
+const FLOAT_LIFETIME_MS = 1100;
 
 export function CombatOverlay({
   locale,
@@ -76,78 +83,129 @@ export function CombatOverlay({
   player,
   mobs,
   backdropUrl,
-  onAttack,
+  onAction,
   onClose,
 }: Props) {
   const [session, setSession] = useState<CombatSession>(initialSession);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hitFlash, setHitFlash] = useState<Set<string>>(new Set());
-  const [attackFlash, setAttackFlash] = useState<Set<string>>(new Set());
   const [floats, setFloats] = useState<FloatingNumber[]>([]);
   const floatIdRef = useRef(1);
   const [showOutcomeCard, setShowOutcomeCard] = useState(initialSession.is_over);
+  /** True between the user tap and the end of the log-entry playback —
+   *  blocks new actions while the cinema plays. */
+  const [playing, setPlaying] = useState(false);
+  /** Per-entity animation state. Key: 'player' | 'mob:0' | 'mob:1' …
+   *  Drives <CharacterStage>. */
+  const [animStates, setAnimStates] = useState<Record<string, AnimState>>(() => {
+    const s: Record<string, AnimState> = { player: "idle" };
+    initialSession.mobs.forEach((_, i) => { s[`mob:${i}`] = "idle"; });
+    return s;
+  });
 
   const currentTurn: CombatTurn =
     session.turn_order[session.turn_idx % session.turn_order.length] ?? { kind: "player" };
 
-  /** Trigger flash + floating-number animations for log entries that
-   *  just arrived. Called every time the server response comes back. */
-  function animateAppended(appended: CombatLogEntry[]) {
-    const targetFlashKeys = new Set<string>();
-    const attackerFlashKeys = new Set<string>();
-    const newFloats: FloatingNumber[] = [];
-    for (const entry of appended) {
-      if (entry.kind === "attack") {
-        targetFlashKeys.add(entry.target);
-        attackerFlashKeys.add(entry.actor);
-        newFloats.push({
-          id: floatIdRef.current++,
-          target: entry.target,
-          value: entry.dmg,
-          variant: "damage",
-        });
-      }
-    }
-    if (targetFlashKeys.size > 0) {
-      setHitFlash((prev) => new Set([...prev, ...targetFlashKeys]));
-      window.setTimeout(() => {
-        setHitFlash((prev) => {
-          const next = new Set(prev);
-          for (const k of targetFlashKeys) next.delete(k);
-          return next;
-        });
-      }, HIT_FLASH_MS);
-    }
-    if (attackerFlashKeys.size > 0) {
-      setAttackFlash((prev) => new Set([...prev, ...attackerFlashKeys]));
-      window.setTimeout(() => {
-        setAttackFlash((prev) => {
-          const next = new Set(prev);
-          for (const k of attackerFlashKeys) next.delete(k);
-          return next;
-        });
-      }, HIT_FLASH_MS);
-    }
-    if (newFloats.length > 0) {
-      setFloats((prev) => [...prev, ...newFloats]);
-      const ids = newFloats.map((f) => f.id);
-      window.setTimeout(() => {
-        setFloats((prev) => prev.filter((f) => !ids.includes(f.id)));
-      }, FLOAT_LIFETIME_MS);
-    }
+  function setEntityAnim(key: string, state: AnimState) {
+    setAnimStates((prev) => ({ ...prev, [key]: state }));
   }
 
-  async function handleAttack(targetIdx: number) {
-    if (busy || session.is_over) return;
+  function sleep(ms: number) {
+    return new Promise((res) => window.setTimeout(res, ms));
+  }
+
+  function pushFloat(target: string, value: number | "MISS", variant: "damage" | "miss") {
+    const id = floatIdRef.current++;
+    setFloats((prev) => [...prev, { id, target, value, variant }]);
+    window.setTimeout(() => {
+      setFloats((prev) => prev.filter((f) => f.id !== id));
+    }, FLOAT_LIFETIME_MS);
+  }
+
+  function flashEntity(key: string) {
+    setHitFlash((prev) => new Set([...prev, key]));
+    window.setTimeout(() => {
+      setHitFlash((prev) => {
+        const n = new Set(prev);
+        n.delete(key);
+        return n;
+      });
+    }, HIT_FLASH_MS);
+  }
+
+  /** Play back the server-resolved log entries one by one with the
+   *  right timing so the user actually sees the attack frames + the
+   *  target reaction. */
+  async function playAppended(appended: CombatLogEntry[]) {
+    setPlaying(true);
+    for (const entry of appended) {
+      if (entry.kind === "attack") {
+        const isSkill = entry.action_kind === "skill" && entry.actor === "player";
+        const actorState: AnimState = isSkill ? "skill" : "attack";
+        const actorDurMs = Math.round(1000 * (isSkill ? 8 : 6) / ANIM_HINT[actorState].fps);
+        setEntityAnim(entry.actor, actorState);
+        // Reaction lands ~halfway through the swing.
+        await sleep(Math.round(actorDurMs * 0.45));
+        setEntityAnim(entry.target, "hurt");
+        flashEntity(entry.target);
+        pushFloat(entry.target, entry.dmg, "damage");
+        await sleep(Math.round(actorDurMs * 0.55) + 250);
+        // Return to idle unless the target just died (death entry will
+        // override below).
+        setAnimStates((prev) => ({
+          ...prev,
+          [entry.actor]: prev[entry.actor] === "death" ? "death" : "idle",
+          [entry.target]: prev[entry.target] === "death" ? "death" : "idle",
+        }));
+      } else if (entry.kind === "miss") {
+        // Mob attacked, player dodged. Mob plays attack; player plays
+        // dodge alongside; no damage number, just "MISS".
+        setEntityAnim(entry.actor, "attack");
+        await sleep(150);
+        setEntityAnim(entry.target, "dodge");
+        pushFloat(entry.target, "MISS", "miss");
+        await sleep(550);
+        setAnimStates((prev) => ({
+          ...prev,
+          [entry.actor]: prev[entry.actor] === "death" ? "death" : "idle",
+          [entry.target]: prev[entry.target] === "death" ? "death" : "idle",
+        }));
+      } else if (entry.kind === "stance") {
+        // Player chose defend/dodge — hold the corresponding pose
+        // until the mob counter sequence finishes (next idle reset).
+        if (entry.mode === "defending") {
+          setEntityAnim("player", "block");
+        } else {
+          // For dodge stance we'll show the actual dodge inline with
+          // each incoming attack (miss entries above). Stay on idle.
+          setEntityAnim("player", "idle");
+        }
+        await sleep(250);
+      } else if (entry.kind === "death") {
+        setEntityAnim(entry.actor, "death");
+        await sleep(500);
+      } else if (entry.kind === "victory") {
+        setEntityAnim("player", "victory");
+        await sleep(400);
+      } else if (entry.kind === "defeat") {
+        setEntityAnim("player", "death");
+        await sleep(500);
+      }
+    }
+    setPlaying(false);
+  }
+
+  async function handleAction(action: PlayerActionKind, targetIdx?: number) {
+    if (busy || playing || session.is_over) return;
     setBusy(true);
     setError(null);
     try {
-      const { nextSession, appended } = await onAttack(targetIdx);
-      animateAppended(appended);
+      const { nextSession, appended } = await onAction(action, targetIdx);
+      await playAppended(appended);
       setSession(nextSession);
       if (nextSession.is_over) {
-        window.setTimeout(() => setShowOutcomeCard(true), 800);
+        window.setTimeout(() => setShowOutcomeCard(true), 600);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -168,11 +226,8 @@ export function CombatOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-abyss-void text-white">
-      {/* Backdrop — either a cinematic scene (from the encounter
-          prop's combat_backdrop_url) or a tiled wall texture as
-          fallback. Cinematic gets a gentle darkening tint only;
-          tiled fallback gets a stronger blur because it's not meant
-          to be looked at directly. */}
+      {/* Backdrop — cinematic scene rendered FULL-SIZE with smooth
+          scaling so the painted detail stays readable. */}
       <div className="pointer-events-none absolute inset-0">
         {backdropUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -180,67 +235,53 @@ export function CombatOverlay({
             src={backdropUrl}
             alt=""
             className="h-full w-full object-cover"
-            style={{ filter: "brightness(0.7) saturate(0.9)", imageRendering: "pixelated" }}
+            style={{ filter: "brightness(0.72) saturate(0.95)" }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/45 to-abyss-coal/70" />
+        <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/40 to-abyss-coal/75" />
       </div>
 
-      {/* Battlefield: enemies LEFT (facing east), player RIGHT
-          (facing west, sprite flipped). Both anchored to the bottom
-          half so the action menu / log don't overlap them. */}
+      {/* Battlefield: enemies LEFT (large, grouped), player RIGHT (large).
+          Both anchored to a shared baseline so they read as standing
+          on the same ground line. */}
       <div className="relative flex-1">
-        <div className="absolute inset-x-0 bottom-0 top-12 flex items-end">
+        <div className="absolute inset-x-0 bottom-2 top-10 flex items-end justify-between gap-4 px-4">
           {/* LEFT — enemy lineup */}
-          <div className="flex flex-1 items-end justify-around gap-2 pb-6 pl-4">
+          <div className="flex flex-1 items-end justify-around gap-1 pb-2">
             {session.mobs.map((m, idx) => {
               const mobMeta = mobs[idx];
-              const targetKey = `mob:${idx}`;
-              const isHit = hitFlash.has(targetKey);
-              const isAttacker = attackFlash.has(targetKey);
-              // Prefer SIDE-VIEW combat sprite first (Phase 4c art);
-              // fall back to top-down rotation if a mob hasn't had the
-              // combat art pass yet.
-              const sprite =
+              const key = `mob:${idx}`;
+              const state = animStates[key] ?? "idle";
+              const isHit = hitFlash.has(key);
+              const baseSprite =
                 m.combat_sprite_atlas?.east ??
                 mobMeta?.combat_sprite_atlas?.east ??
-                m.combat_sprite_atlas?.west ??
-                mobMeta?.combat_sprite_atlas?.west ??
                 m.sprite_atlas?.east ??
                 mobMeta?.sprite_atlas?.east ??
                 m.sprite_atlas?.south ??
                 mobMeta?.sprite_atlas?.south ??
                 null;
-              const idleFrames =
-                m.combat_animation_atlas?.idle?.east ??
-                mobMeta?.combat_animation_atlas?.idle?.east ??
-                m.animation_atlas?.idle?.east ??
-                mobMeta?.animation_atlas?.idle?.east ??
+              const atlas =
+                m.combat_animation_atlas ??
+                mobMeta?.combat_animation_atlas ??
+                m.animation_atlas ??
+                mobMeta?.animation_atlas ??
                 null;
               return (
                 <div key={idx} className="flex flex-col items-center gap-1">
-                  <div className="relative h-32 w-32">
-                    {sprite || idleFrames ? (
-                      <FrameLoop
-                        idleFrames={idleFrames}
-                        fallbackUrl={sprite}
-                        alt={m.name}
-                        className={
-                          "h-full w-full object-contain transition-transform duration-200 " +
-                          (m.alive ? "" : "opacity-30 grayscale ") +
-                          (isHit ? "translate-x-1 brightness-200 " : "") +
-                          (isAttacker ? "-translate-x-2 " : "")
-                        }
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded border border-abyss-coal bg-abyss-coal/60 text-center text-[10px] text-abyss-fog">
-                        {m.name}
-                      </div>
-                    )}
+                  <div className="relative h-52 w-52 sm:h-56 sm:w-56">
+                    <CharacterStage
+                      baseSprite={baseSprite}
+                      atlas={atlas}
+                      facing="east"
+                      state={state}
+                      flash={isHit}
+                      grayscale={!m.alive}
+                    />
                     {floats
-                      .filter((f) => f.target === targetKey)
+                      .filter((f) => f.target === key)
                       .map((f) => (
-                        <FloatingDamage key={f.id} value={f.value} />
+                        <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
                       ))}
                   </div>
                   <EntityBar
@@ -257,44 +298,30 @@ export function CombatOverlay({
           </div>
 
           {/* RIGHT — player */}
-          <div className="flex flex-1 items-end justify-around pb-6 pr-4">
+          <div className="flex flex-1 items-end justify-around pb-2">
             <div className="flex flex-col items-center gap-1">
-              <div className="relative h-36 w-36">
-                {(() => {
-                  // Prefer side-view combat sprite. Player faces WEST
-                  // (toward enemies on the left), so use west variant
-                  // if present; else east flipped horizontally; else
-                  // the top-down south sprite flipped (last fallback).
-                  const combatWest = player.combat_sprite_atlas?.west ?? null;
-                  const combatEast = player.combat_sprite_atlas?.east ?? null;
-                  const topDown = player.sprite_atlas?.south ?? null;
-                  const src = combatWest ?? combatEast ?? topDown;
-                  if (!src) return null;
-                  const shouldFlip = !combatWest && (!!combatEast || !!topDown);
-                  // Prefer combat idle frames; fall back to top-down idle.
-                  const idleFrames =
-                    player.combat_animation_atlas?.idle?.west ??
-                    player.combat_animation_atlas?.idle?.east ??
-                    player.animation_atlas?.idle?.south ??
-                    null;
-                  return (
-                    <FrameLoop
-                      idleFrames={idleFrames}
-                      fallbackUrl={src}
-                      alt={player.name}
-                      className={
-                        "h-full w-full object-contain transition-transform duration-200 " +
-                        (hitFlash.has("player") ? "-translate-x-1 brightness-200 " : "") +
-                        (attackFlash.has("player") ? "translate-x-2 " : "")
-                      }
-                      flipHorizontal={shouldFlip}
-                    />
-                  );
-                })()}
+              <div className="relative h-56 w-56 sm:h-64 sm:w-64">
+                <CharacterStage
+                  baseSprite={
+                    player.combat_sprite_atlas?.west ??
+                    player.combat_sprite_atlas?.east ??
+                    player.sprite_atlas?.south ??
+                    null
+                  }
+                  atlas={player.combat_animation_atlas ?? player.animation_atlas ?? null}
+                  facing="west"
+                  // If the only available sprite is the top-down south
+                  // exploration sprite, flip horizontally so the player
+                  // faces the enemies (they're on the LEFT).
+                  flipFallback={!player.combat_sprite_atlas?.west}
+                  state={animStates["player"] ?? "idle"}
+                  flash={hitFlash.has("player")}
+                  grayscale={false}
+                />
                 {floats
                   .filter((f) => f.target === "player")
                   .map((f) => (
-                    <FloatingDamage key={f.id} value={f.value} />
+                    <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
                   ))}
               </div>
               <EntityBar
@@ -326,25 +353,34 @@ export function CombatOverlay({
         </div>
       </div>
 
-      {/* Action menu */}
+      {/* Action menu — 4 actions per the user's extended set. */}
       {!session.is_over ? (
         <div className="relative border-t-2 border-abyss-soul/60 bg-abyss-deep/95 px-3 py-3 backdrop-blur">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              disabled={busy || currentTurn.kind !== "player" || defaultTargetIdx < 0}
-              onClick={() => handleAttack(defaultTargetIdx)}
-              className="rounded bg-abyss-ember/90 px-3 py-2.5 text-sm font-bold uppercase tracking-widest text-abyss-void hover:bg-abyss-ember disabled:opacity-40"
-            >
-              {t(locale, "combat.action_attack")}
-            </button>
-            <div className="flex items-center justify-center text-[11px] text-abyss-fog">
-              {busy
-                ? t(locale, "combat.resolving")
-                : currentTurn.kind === "player"
-                  ? t(locale, "combat.your_turn")
-                  : t(locale, "combat.enemy_turn")}
-            </div>
+          <div className="grid grid-cols-4 gap-2">
+            <ActionButton
+              label={t(locale, "combat.action_attack")}
+              color="amber"
+              disabled={busy || playing || currentTurn.kind !== "player" || defaultTargetIdx < 0}
+              onClick={() => handleAction("attack", defaultTargetIdx)}
+            />
+            <ActionButton
+              label={t(locale, "combat.action_skill")}
+              color="violet"
+              disabled={busy || playing || currentTurn.kind !== "player" || defaultTargetIdx < 0}
+              onClick={() => handleAction("skill", defaultTargetIdx)}
+            />
+            <ActionButton
+              label={t(locale, "combat.action_defend")}
+              color="sky"
+              disabled={busy || playing || currentTurn.kind !== "player"}
+              onClick={() => handleAction("defend")}
+            />
+            <ActionButton
+              label={t(locale, "combat.action_dodge")}
+              color="emerald"
+              disabled={busy || playing || currentTurn.kind !== "player"}
+              onClick={() => handleAction("dodge")}
+            />
           </div>
           {session.mobs.filter((m) => m.alive).length > 1 ? (
             <div className="mt-2 flex gap-2">
@@ -353,8 +389,8 @@ export function CombatOverlay({
                   <button
                     key={idx}
                     type="button"
-                    disabled={busy || currentTurn.kind !== "player"}
-                    onClick={() => handleAttack(idx)}
+                    disabled={busy || playing || currentTurn.kind !== "player"}
+                    onClick={() => handleAction("attack", idx)}
                     className="flex-1 rounded border border-abyss-soul/60 bg-abyss-coal/80 px-2 py-1 text-[10px] uppercase tracking-widest hover:bg-abyss-soul/20 disabled:opacity-40"
                   >
                     → {mobs[idx]?.name_localized ?? m.name}
@@ -363,8 +399,15 @@ export function CombatOverlay({
               )}
             </div>
           ) : null}
+          <div className="mt-1 text-center text-[10px] text-abyss-fog">
+            {playing
+              ? t(locale, "combat.resolving")
+              : currentTurn.kind === "player"
+                ? t(locale, "combat.your_turn")
+                : t(locale, "combat.enemy_turn")}
+          </div>
           {error ? (
-            <p className="mt-2 text-[10px] text-rose-400">{error}</p>
+            <p className="mt-2 text-center text-[10px] text-rose-400">{error}</p>
           ) : null}
         </div>
       ) : null}
@@ -378,6 +421,119 @@ export function CombatOverlay({
         />
       ) : null}
     </div>
+  );
+}
+
+/** Action button with a single-color theme (used in the 4-button row). */
+function ActionButton({
+  label,
+  color,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  color: "amber" | "violet" | "sky" | "emerald";
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const bg: Record<typeof color, string> = {
+    amber:   "bg-amber-500/90 hover:bg-amber-500 text-abyss-void",
+    violet:  "bg-violet-500/90 hover:bg-violet-500 text-white",
+    sky:     "bg-sky-500/90 hover:bg-sky-500 text-white",
+    emerald: "bg-emerald-500/90 hover:bg-emerald-500 text-abyss-void",
+  };
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`rounded px-2 py-2.5 text-[11px] font-bold uppercase tracking-widest disabled:opacity-40 ${bg[color]}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * Renders a character sprite + plays the state-appropriate animation.
+ * Loop states cycle forever; one-shot states run their frames once and
+ * the parent flips the state back to 'idle' afterward. Hold states
+ * (death, block) stay on the last frame until parent changes state.
+ */
+function CharacterStage({
+  baseSprite,
+  atlas,
+  facing,
+  state,
+  flash,
+  grayscale,
+  flipFallback,
+}: {
+  baseSprite: string | null;
+  atlas: Record<string, Record<string, string[]>> | null;
+  facing: "east" | "west";
+  state: AnimState;
+  flash: boolean;
+  grayscale: boolean;
+  /** Set true when baseSprite is a top-down rotation and we need to
+   *  flip it horizontally so the character faces toward the centre. */
+  flipFallback?: boolean;
+}) {
+  const stateFrames = atlas?.[state]?.[facing] ?? null;
+  const hint = ANIM_HINT[state];
+  const [frameIdx, setFrameIdx] = useState(0);
+
+  // Reset to frame 0 when state changes.
+  useEffect(() => {
+    setFrameIdx(0);
+  }, [state]);
+
+  useEffect(() => {
+    if (!stateFrames || stateFrames.length <= 1) return;
+    let cancelled = false;
+    let i = 0;
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      const last = stateFrames.length - 1;
+      if (i < last) {
+        i += 1;
+        setFrameIdx(i);
+      } else if (hint.loop) {
+        i = 0;
+        setFrameIdx(0);
+      } else if (hint.hold) {
+        // Stay on last frame.
+      } else {
+        // One-shot finished; parent will transition us back to idle.
+        window.clearInterval(interval);
+      }
+    }, Math.max(40, Math.round(1000 / hint.fps)));
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [stateFrames, hint.fps, hint.loop, hint.hold]);
+
+  const src =
+    stateFrames && stateFrames.length > 0
+      ? (stateFrames[Math.min(frameIdx, stateFrames.length - 1)] ?? baseSprite ?? "")
+      : (baseSprite ?? "");
+  if (!src) return null;
+  const transforms: string[] = [];
+  if (flipFallback) transforms.push("scaleX(-1)");
+  const transform = transforms.length > 0 ? transforms.join(" ") : undefined;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className={
+        "h-full w-full object-contain transition-[filter,transform] duration-150 " +
+        (flash ? "brightness-200 " : "") +
+        (grayscale ? "opacity-30 grayscale " : "")
+      }
+      style={{ imageRendering: "pixelated", transform }}
+    />
   );
 }
 
@@ -404,12 +560,11 @@ function EntityBar({
   return (
     <div
       className={
-        "w-36 rounded border bg-abyss-void/80 px-1.5 py-1 backdrop-blur " +
+        "w-44 rounded border bg-abyss-void/80 px-1.5 py-1 backdrop-blur " +
         (isCurrentActor ? "border-amber-400 ring-1 ring-amber-400/60" : "border-abyss-coal/70")
       }
     >
-      <p className="truncate text-[10px] font-semibold text-white">{label}</p>
-      {/* HP bar (red — canonical color the user requested) */}
+      <p className="truncate text-[11px] font-semibold text-white">{label}</p>
       <div className="mt-0.5 flex items-center gap-1">
         <span className="w-5 text-[8px] uppercase tracking-widest text-rose-300">PV</span>
         <div className="flex-1">
@@ -424,7 +579,6 @@ function EntityBar({
           {hp}/{hpMax}
         </span>
       </div>
-      {/* MP bar — cyan; shown for player only (mob has no MP stat yet). */}
       {mp !== null && mpMax !== null ? (
         <div className="mt-0.5 flex items-center gap-1">
           <span className="w-5 text-[8px] uppercase tracking-widest text-sky-300">PM</span>
@@ -445,63 +599,23 @@ function EntityBar({
   );
 }
 
-/** Tiny frame-loop player: if `idleFrames` is non-empty, cycles
- *  through them at ~6fps for a breathing-idle loop. Otherwise just
- *  shows `fallbackUrl` as a static <img>. We don't reach for Phaser
- *  here since the combat overlay is HTML/CSS for portability. */
-function FrameLoop({
-  idleFrames,
-  fallbackUrl,
-  alt,
-  className,
-  framerate = 6,
-  flipHorizontal = false,
-}: {
-  idleFrames: string[] | null;
-  fallbackUrl: string | null;
-  alt: string;
-  className: string;
-  framerate?: number;
-  flipHorizontal?: boolean;
-}) {
-  const [frameIdx, setFrameIdx] = useState(0);
-  useEffect(() => {
-    if (!idleFrames || idleFrames.length <= 1) return;
-    const interval = window.setInterval(() => {
-      setFrameIdx((i) => (i + 1) % idleFrames.length);
-    }, Math.round(1000 / framerate));
-    return () => window.clearInterval(interval);
-  }, [idleFrames, framerate]);
-  const src =
-    idleFrames && idleFrames.length > 0
-      ? (idleFrames[frameIdx % idleFrames.length] ?? fallbackUrl ?? "")
-      : (fallbackUrl ?? "");
-  if (!src) return null;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      style={{ imageRendering: "pixelated", transform: flipHorizontal ? "scaleX(-1)" : undefined }}
-    />
-  );
-}
-
-function FloatingDamage({ value }: { value: number }) {
+function FloatingDamage({ value, variant }: { value: number | "MISS"; variant: "damage" | "miss" }) {
   return (
     <span
-      className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-2xl font-black text-amber-300"
+      className={
+        "pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-3xl font-black " +
+        (variant === "miss" ? "text-sky-300" : "text-amber-300")
+      }
       style={{
         textShadow: "0 0 4px #000, 0 0 8px #000",
-        animation: "abyssFloatUp 1s ease-out forwards",
+        animation: "abyssFloatUp 1.1s ease-out forwards",
       }}
     >
-      -{value}
+      {value === "MISS" ? "MISS" : `-${value}`}
       <style>{`
         @keyframes abyssFloatUp {
           0% { transform: translate(-50%, 0); opacity: 1; }
-          100% { transform: translate(-50%, -50px); opacity: 0; }
+          100% { transform: translate(-50%, -60px); opacity: 0; }
         }
       `}</style>
     </span>
@@ -581,11 +695,22 @@ function formatLogEntry(
       const actor = actorName(entry.actor);
       const target = actorName(entry.target);
       const tone = entry.actor === "player" ? "text-amber-200" : "text-rose-300";
+      const key = entry.action_kind === "skill" ? "combat.log_skill" : "combat.log_attack";
       return {
-        text: t(locale, "combat.log_attack", { actor, target, dmg: entry.dmg }),
+        text: t(locale, key, { actor, target, dmg: entry.dmg }),
         tone,
       };
     }
+    case "miss":
+      return {
+        text: t(locale, "combat.log_miss", { actor: actorName(entry.actor), target: actorName(entry.target) }),
+        tone: "text-sky-300",
+      };
+    case "stance":
+      return {
+        text: t(locale, entry.mode === "defending" ? "combat.log_defend" : "combat.log_dodge_ready"),
+        tone: "text-emerald-300 italic",
+      };
     case "death":
       return {
         text: t(locale, "combat.log_death", { actor: actorName(entry.actor) }),

@@ -47,8 +47,13 @@ export type CombatTurn =
   | { kind: "player" }
   | { kind: "mob"; idx: number };
 
+/** Player action kinds. Mobs only use 'attack' for now. */
+export type PlayerActionKind = "attack" | "skill" | "defend" | "dodge";
+
 export type CombatLogEntry =
-  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number }
+  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number; action_kind?: "attack" | "skill" }
+  | { turn: number; kind: "miss"; actor: string; target: "player" | string; reason: "dodged" }
+  | { turn: number; kind: "stance"; actor: "player"; mode: "defending" | "dodging" }
   | { turn: number; kind: "death"; actor: string }
   | { turn: number; kind: "victory"; exp_awarded: number; khryn_awarded: number }
   | { turn: number; kind: "defeat" };
@@ -114,68 +119,51 @@ function computeDamage(atk: number, def: number): number {
   return Math.max(1, atk - Math.floor(def / 2));
 }
 
-/** Pure resolver: apply a player attack on target mob, then ALL mob
- *  counter-attacks until it's the player's turn again or the fight
- *  is over. Returns the mutated state + the entries appended to the
- *  log (caller persists). Throws on validation failures so the caller
- *  can return a 4xx. */
-export function applyPlayerAttack(
-  state: CombatSessionState,
-  args: { targetMobIdx: number },
-): { next: CombatSessionState; appended: CombatLogEntry[] } {
-  if (state.is_over) throw new Error("COMBAT_OVER");
-  const currentTurn = state.turn_order[state.turn_idx % state.turn_order.length];
-  if (!currentTurn || currentTurn.kind !== "player") throw new Error("NOT_PLAYER_TURN");
-  const targetIdx = args.targetMobIdx;
-  const target = state.mobs[targetIdx];
-  if (!target || !target.alive) throw new Error("INVALID_TARGET");
+/** Skill action damage multiplier. Phase 4d will branch by class /
+ *  weapon; for now warrior gets a flat 1.6× heavy strike. */
+const SKILL_DAMAGE_MULTIPLIER = 1.6;
+/** Defend stance halves incoming damage during the mob counter
+ *  sequence that follows the player's turn. */
+const DEFEND_DAMAGE_FACTOR = 0.5;
+/** Dodge stance gives every incoming mob attack this miss chance. */
+const DODGE_MISS_CHANCE = 0.5;
 
-  const next: CombatSessionState = JSON.parse(JSON.stringify(state));
-  const appended: CombatLogEntry[] = [];
-  const nextTargetMob = next.mobs[targetIdx]!;
-
-  // 1) Player attack.
-  const dmg = computeDamage(next.player_atk, target.def);
-  const newHp = Math.max(0, nextTargetMob.hp - dmg);
-  nextTargetMob.hp = newHp;
-  appended.push({
-    turn: next.turn_idx,
-    kind: "attack",
-    actor: "player",
-    target: `mob:${targetIdx}`,
-    dmg,
-    target_hp_after: newHp,
-  });
-  if (newHp === 0) {
-    nextTargetMob.alive = false;
-    appended.push({ turn: next.turn_idx, kind: "death", actor: `mob:${targetIdx}` });
-  }
-
-  // 2) Did the player just KO everyone? Victory.
-  if (next.mobs.every((m) => !m.alive)) {
-    const exp = next.mobs.reduce((a, m) => a + m.exp, 0);
-    const khryn = Math.round(exp / 3); // baseline; tune later
-    appended.push({ turn: next.turn_idx, kind: "victory", exp_awarded: exp, khryn_awarded: khryn });
-    next.is_over = true;
-    next.outcome = "victory";
-    next.log_entries = [...next.log_entries, ...appended];
-    return { next, appended };
-  }
-
-  // 3) Advance turn until the player is up again or the fight ends.
+/** Resolve all mob counter-attacks until it's the player's turn again
+ *  or the fight ends. `stance` modulates incoming damage / miss roll
+ *  based on what the player chose this turn (normal / defending /
+ *  dodging). Pushes log entries into `appended` and mutates `next`. */
+function runMobCounterAttacks(
+  next: CombatSessionState,
+  appended: CombatLogEntry[],
+  stance: "normal" | "defending" | "dodging",
+): "continue" | "defeat" {
   next.turn_idx += 1;
   while (true) {
     const t = next.turn_order[next.turn_idx % next.turn_order.length];
-    if (!t || t.kind === "player") break;
+    if (!t || t.kind === "player") return "continue";
     const mobIdx = t.idx;
     const attacker = next.mobs[mobIdx];
     if (!attacker || !attacker.alive) {
-      // Skip dead mobs.
       next.turn_idx += 1;
       continue;
     }
-    // 3a) Mob attacks the player.
-    const mobDmg = computeDamage(attacker.atk, next.player_def);
+    // Dodge roll first — if the player evades, no damage + log a miss.
+    if (stance === "dodging" && Math.random() < DODGE_MISS_CHANCE) {
+      appended.push({
+        turn: next.turn_idx,
+        kind: "miss",
+        actor: `mob:${mobIdx}`,
+        target: "player",
+        reason: "dodged",
+      });
+      next.turn_idx += 1;
+      continue;
+    }
+    // Compute damage; defending halves it.
+    const rawDmg = computeDamage(attacker.atk, next.player_def);
+    const mobDmg = stance === "defending"
+      ? Math.max(1, Math.floor(rawDmg * DEFEND_DAMAGE_FACTOR))
+      : rawDmg;
     next.player_hp = Math.max(0, next.player_hp - mobDmg);
     appended.push({
       turn: next.turn_idx,
@@ -189,14 +177,105 @@ export function applyPlayerAttack(
       appended.push({ turn: next.turn_idx, kind: "defeat" });
       next.is_over = true;
       next.outcome = "defeat";
-      next.log_entries = [...next.log_entries, ...appended];
-      return { next, appended };
+      return "defeat";
     }
     next.turn_idx += 1;
   }
+}
+
+function checkAllMobsDead(next: CombatSessionState, appended: CombatLogEntry[]): boolean {
+  if (!next.mobs.every((m) => !m.alive)) return false;
+  const exp = next.mobs.reduce((a, m) => a + m.exp, 0);
+  const khryn = Math.round(exp / 3);
+  appended.push({ turn: next.turn_idx, kind: "victory", exp_awarded: exp, khryn_awarded: khryn });
+  next.is_over = true;
+  next.outcome = "victory";
+  return true;
+}
+
+/**
+ * Apply ONE player action this turn, then resolve mob counter-attacks
+ * until the player's turn comes up again or the fight ends. Returns
+ * mutated state + appended log entries. Throws on validation failures
+ * so the caller can map to 4xx.
+ *
+ * Supported actions (phase 4d):
+ *   - attack: standard swing on `targetMobIdx`
+ *   - skill:  heavy strike on `targetMobIdx`, 1.6× damage
+ *   - defend: no swing; player_def doubled for incoming mob counters
+ *             this turn (DEFEND_DAMAGE_FACTOR halves the damage)
+ *   - dodge:  no swing; every incoming mob attack rolls 50% miss
+ */
+export function applyPlayerAction(
+  state: CombatSessionState,
+  args: { action: PlayerActionKind; targetMobIdx?: number },
+): { next: CombatSessionState; appended: CombatLogEntry[] } {
+  if (state.is_over) throw new Error("COMBAT_OVER");
+  const currentTurn = state.turn_order[state.turn_idx % state.turn_order.length];
+  if (!currentTurn || currentTurn.kind !== "player") throw new Error("NOT_PLAYER_TURN");
+
+  const next: CombatSessionState = JSON.parse(JSON.stringify(state));
+  const appended: CombatLogEntry[] = [];
+
+  // 1) Resolve the player's action.
+  if (args.action === "attack" || args.action === "skill") {
+    const targetIdx = args.targetMobIdx;
+    if (typeof targetIdx !== "number") throw new Error("MISSING_TARGET");
+    const targetMob = next.mobs[targetIdx];
+    if (!targetMob || !targetMob.alive) throw new Error("INVALID_TARGET");
+
+    const baseDmg = computeDamage(next.player_atk, targetMob.def);
+    const dmg = args.action === "skill"
+      ? Math.max(1, Math.floor(baseDmg * SKILL_DAMAGE_MULTIPLIER))
+      : baseDmg;
+    const newHp = Math.max(0, targetMob.hp - dmg);
+    targetMob.hp = newHp;
+    appended.push({
+      turn: next.turn_idx,
+      kind: "attack",
+      actor: "player",
+      target: `mob:${targetIdx}`,
+      dmg,
+      target_hp_after: newHp,
+      action_kind: args.action,
+    });
+    if (newHp === 0) {
+      targetMob.alive = false;
+      appended.push({ turn: next.turn_idx, kind: "death", actor: `mob:${targetIdx}` });
+    }
+
+    if (checkAllMobsDead(next, appended)) {
+      next.log_entries = [...next.log_entries, ...appended];
+      return { next, appended };
+    }
+  } else {
+    // defend / dodge — no offensive output, just announce the stance.
+    appended.push({
+      turn: next.turn_idx,
+      kind: "stance",
+      actor: "player",
+      mode: args.action === "defend" ? "defending" : "dodging",
+    });
+  }
+
+  // 2) Mob counter-attacks with the appropriate stance modifier.
+  const stance: "normal" | "defending" | "dodging" =
+    args.action === "defend" ? "defending"
+    : args.action === "dodge" ? "dodging"
+    : "normal";
+  runMobCounterAttacks(next, appended, stance);
 
   next.log_entries = [...next.log_entries, ...appended];
   return { next, appended };
+}
+
+/** Back-compat shim — Phase 4b shipped applyPlayerAttack(state, { targetMobIdx }).
+ *  Keep the name so the old call sites stay valid until they're migrated. */
+export function applyPlayerAttack(
+  state: CombatSessionState,
+  args: { targetMobIdx: number },
+): { next: CombatSessionState; appended: CombatLogEntry[] } {
+  return applyPlayerAction(state, { action: "attack", targetMobIdx: args.targetMobIdx });
 }
 
 /** Persist the post-combat side effects to the characters row:
