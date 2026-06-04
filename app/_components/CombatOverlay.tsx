@@ -113,6 +113,11 @@ export function CombatOverlay({
   const [playing, setPlaying] = useState(false);
   /** Index of the action the player is hovering / has highlighted. */
   const [actionIdx, setActionIdx] = useState(0);
+  /** When non-null we're in the target-selection sub-state: the
+   *  command box dims, an arrow cursor appears beside the focused
+   *  mob, and a confirm tap fires the pending action against that
+   *  index. Null = command picker active. */
+  const [targetPicker, setTargetPicker] = useState<{ pendingAction: PlayerActionKind; targetIdx: number } | null>(null);
   /** Per-entity animation state. */
   const [animStates, setAnimStates] = useState<Record<string, AnimState>>(() => {
     const s: Record<string, AnimState> = { player: "idle" };
@@ -234,8 +239,42 @@ export function CombatOverlay({
   function triggerSelectedAction() {
     const choice = ACTIONS[actionIdx];
     if (!choice) return;
-    if (choice.needsTarget && defaultTargetIdx < 0) return;
-    void handleAction(choice.kind, choice.needsTarget ? defaultTargetIdx : undefined);
+    if (choice.needsTarget) {
+      if (defaultTargetIdx < 0) return;
+      const aliveCount = session.mobs.filter((m) => m.alive).length;
+      if (aliveCount > 1) {
+        // Open target picker — let the player choose explicitly.
+        setTargetPicker({ pendingAction: choice.kind, targetIdx: defaultTargetIdx });
+        return;
+      }
+      // Single target left — fire directly.
+      void handleAction(choice.kind, defaultTargetIdx);
+      return;
+    }
+    void handleAction(choice.kind);
+  }
+
+  function confirmTarget() {
+    if (!targetPicker) return;
+    const idx = targetPicker.targetIdx;
+    const action = targetPicker.pendingAction;
+    setTargetPicker(null);
+    void handleAction(action, idx);
+  }
+
+  function cancelTarget() {
+    setTargetPicker(null);
+  }
+
+  function cycleTarget(delta: 1 | -1) {
+    if (!targetPicker) return;
+    const alive: number[] = session.mobs
+      .map((m, i) => (m.alive ? i : -1))
+      .filter((i) => i >= 0);
+    if (alive.length === 0) return;
+    const cur = alive.indexOf(targetPicker.targetIdx);
+    const next = alive[(cur + delta + alive.length) % alive.length]!;
+    setTargetPicker({ ...targetPicker, targetIdx: next });
   }
 
   return (
@@ -254,74 +293,37 @@ export function CombatOverlay({
         <div className="absolute inset-0 bg-gradient-to-b from-abyss-void/35 via-abyss-deep/40 to-abyss-coal/70" />
       </div>
 
-      {/* Battlefield — FFVI / Chrono Trigger composition: enemies
-          clustered LEFT (anchored to the left edge with breathing
-          room), player anchored RIGHT in its own column. Sprites are
-          intentionally BIG (max-w 240/260 + aspect-square) so the
-          art reads at proper combat scale. */}
+      {/* Battlefield — FFVI / Octopath composition:
+            LEFT half  → enemies stacked VERTICALLY, centered. With
+                         3-4 mobs we break into a back column + a
+                         front column (the front column staggers
+                         up/down per the user's request).
+            RIGHT half → player CENTERED vertically + horizontally.
+
+          During the target picker phase the focused mob is haloed
+          + an arrow cursor sits beside them. */}
       <div className="relative flex-1">
-        <div className="absolute inset-x-0 bottom-1 top-4 flex items-end gap-3 px-3">
-          {/* Enemy cluster — takes the LEFT 60% of the row. */}
-          <div className="flex flex-[3] items-end justify-start gap-2 pb-2 pl-1">
-          {session.mobs.map((m, idx) => {
-            const mobMeta = mobs[idx];
-            const key = `mob:${idx}`;
-            const state = animStates[key] ?? "idle";
-            const isHit = hitFlash.has(key);
-            const baseSprite =
-              m.combat_sprite_atlas?.east ??
-              mobMeta?.combat_sprite_atlas?.east ??
-              m.sprite_atlas?.east ??
-              mobMeta?.sprite_atlas?.east ??
-              m.sprite_atlas?.south ??
-              mobMeta?.sprite_atlas?.south ??
-              null;
-            const atlas =
-              m.combat_animation_atlas ??
-              mobMeta?.combat_animation_atlas ??
-              m.animation_atlas ??
-              mobMeta?.animation_atlas ??
-              null;
-            return (
-              <div key={idx} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                <div className="relative aspect-square w-full max-w-[240px]">
-                  <CharacterStage
-                    baseSprite={baseSprite}
-                    atlas={atlas}
-                    facing="east"
-                    state={state}
-                    flash={isHit}
-                    grayscale={!m.alive}
-                    flipFallback={MOB_SPRITE_FLIP[m.id] ?? false}
-                    debugLabel={m.name}
-                  />
-                  {floats
-                    .filter((f) => f.target === key)
-                    .map((f) => (
-                      <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
-                    ))}
-                </div>
-                {/* Tiny floating HP bar over each enemy — kept minimal
-                    so the FFVI command box stays the focus of the HUD. */}
-                <div className="w-full max-w-[180px]">
-                  <div className="flex items-baseline justify-between text-[10px] font-semibold text-white drop-shadow">
-                    <span className="truncate">{mobMeta?.name_localized ?? m.name}</span>
-                    <span className="tabular-nums text-abyss-fog">{m.hp}/{m.max_hp}</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded bg-abyss-coal/70 ring-1 ring-white/30">
-                    <div
-                      className="h-full bg-rose-500 transition-all duration-300"
-                      style={{ width: `${m.max_hp > 0 ? Math.max(0, (m.hp / m.max_hp) * 100) : 0}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="absolute inset-x-0 bottom-1 top-4 grid grid-cols-2 gap-2 px-3">
+          {/* Enemies — vertically stacked, centered. Multi-column
+              layout for 3-4 mobs handled by enemyLayout(). */}
+          <div className="flex items-center justify-center">
+            <EnemyCluster
+              mobs={session.mobs}
+              encounterMobs={mobs}
+              animStates={animStates}
+              hitFlash={hitFlash}
+              floats={floats}
+              targetPickerIdx={targetPicker?.targetIdx ?? null}
+              onPickTarget={(idx) => {
+                if (targetPicker && session.mobs[idx]?.alive) {
+                  setTargetPicker({ ...targetPicker, targetIdx: idx });
+                }
+              }}
+            />
           </div>
 
-          {/* Player — anchored RIGHT in its own column. */}
-          <div className="flex flex-[2] flex-col items-end justify-end gap-1 pb-2 pr-2">
+          {/* Player — centered. */}
+          <div className="flex items-center justify-center">
             <div className="relative aspect-square w-full max-w-[260px]">
               {(() => {
                 const csWest = player.combat_sprite_atlas?.west ?? null;
@@ -359,38 +361,84 @@ export function CombatOverlay({
           pointing glove. RIGHT = active party panel. */}
       <div className="relative grid grid-cols-2 gap-3 px-3 pb-3">
         <FFVIBox>
-          <div className="flex flex-col gap-1.5">
-            {ACTIONS.map((a, idx) => {
-              const isSelected = idx === actionIdx;
-              const disabled =
-                !isPlayerTurn || (a.needsTarget && defaultTargetIdx < 0);
-              return (
+          {targetPicker ? (
+            // TARGET PICKER — replaces the command list while the
+            // player chooses which enemy to hit.
+            <div className="flex flex-col gap-2">
+              <p
+                className="text-[11px] uppercase tracking-widest text-amber-200"
+                style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+              >
+                {t(locale, "combat.pick_target")}
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
-                  key={a.kind}
                   type="button"
-                  disabled={disabled}
-                  onMouseEnter={() => setActionIdx(idx)}
-                  onClick={() => {
-                    setActionIdx(idx);
-                    if (!disabled) triggerSelectedAction();
-                  }}
-                  className={
-                    "flex items-center gap-2 rounded px-1.5 py-1 text-left text-[14px] font-bold uppercase tracking-widest transition-colors disabled:opacity-40 " +
-                    (isSelected
-                      ? "text-amber-300"
-                      : "text-white hover:text-amber-200")
-                  }
-                  style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+                  onClick={() => cycleTarget(-1)}
+                  className="rounded bg-sky-600/80 px-1 py-1 text-[13px] font-bold uppercase tracking-widest text-white hover:bg-sky-600"
                 >
-                  <PointingGlove
-                    visible={isSelected}
-                    blinking={isPlayerTurn}
-                  />
-                  <span>{t(locale, a.labelKey)}</span>
+                  ▲
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  type="button"
+                  onClick={() => cycleTarget(1)}
+                  className="rounded bg-sky-600/80 px-1 py-1 text-[13px] font-bold uppercase tracking-widest text-white hover:bg-sky-600"
+                >
+                  ▼
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={confirmTarget}
+                disabled={busy || playing}
+                className="rounded bg-amber-500 px-2 py-1.5 text-[12px] font-bold uppercase tracking-widest text-abyss-void hover:bg-amber-400 disabled:opacity-40"
+              >
+                {t(locale, "combat.confirm")}
+              </button>
+              <button
+                type="button"
+                onClick={cancelTarget}
+                disabled={busy || playing}
+                className="rounded bg-abyss-coal/70 px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest text-white hover:bg-abyss-coal disabled:opacity-40"
+              >
+                {t(locale, "combat.cancel")}
+              </button>
+            </div>
+          ) : (
+            // COMMAND LIST — default state.
+            <div className="flex flex-col gap-1.5">
+              {ACTIONS.map((a, idx) => {
+                const isSelected = idx === actionIdx;
+                const disabled =
+                  !isPlayerTurn || (a.needsTarget && defaultTargetIdx < 0);
+                return (
+                  <button
+                    key={a.kind}
+                    type="button"
+                    disabled={disabled}
+                    onMouseEnter={() => setActionIdx(idx)}
+                    onClick={() => {
+                      setActionIdx(idx);
+                      if (!disabled) triggerSelectedAction();
+                    }}
+                    className={
+                      "flex items-center gap-2 rounded px-1.5 py-1 text-left text-[14px] font-bold uppercase tracking-widest transition-colors disabled:opacity-40 " +
+                      (isSelected
+                        ? "text-amber-300"
+                        : "text-white hover:text-amber-200")
+                    }
+                    style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+                  >
+                    <PointingGlove
+                      visible={isSelected}
+                      blinking={isPlayerTurn}
+                    />
+                    <span>{t(locale, a.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </FFVIBox>
 
         <FFVIBox>
@@ -456,6 +504,167 @@ export function CombatOverlay({
       ) : null}
     </div>
   );
+}
+
+/**
+ * EnemyCluster — lays out mobs per the user's spec:
+ *   1: single sprite centered
+ *   2: stacked vertically, centered + spaced
+ *   3: 1 back column + 2 front (front staggered up/down)
+ *   4: 2 back stacked + 2 front staggered (up/down)
+ * Larger counts fall back to the 4-mob pattern with the extras
+ * appended to the back column.
+ *
+ * The focused mob (during a target-picker) gets an amber halo + a
+ * pointing-arrow cursor so the player can SEE which one is selected.
+ */
+function EnemyCluster({
+  mobs,
+  encounterMobs,
+  animStates,
+  hitFlash,
+  floats,
+  targetPickerIdx,
+  onPickTarget,
+}: {
+  mobs: CombatSession["mobs"];
+  encounterMobs: EncounterMob[];
+  animStates: Record<string, AnimState>;
+  hitFlash: Set<string>;
+  floats: FloatingNumber[];
+  targetPickerIdx: number | null;
+  onPickTarget: (idx: number) => void;
+}) {
+  // [col, rowOffsetUnits] where col 0 = back, col 1 = front; row offset
+  // in units of ~28px (one tile-ish staggered).
+  const positions = enemyLayout(mobs.length);
+  const cols: Array<Array<{ idx: number; offset: number }>> = [[], []];
+  positions.forEach((p, i) => {
+    cols[p.col]!.push({ idx: i, offset: p.offset });
+  });
+  return (
+    <div className="flex h-full w-full items-center justify-center gap-3">
+      {cols.map((col, colIdx) =>
+        col.length === 0 ? null : (
+          <div key={colIdx} className="flex flex-col items-center justify-center gap-3">
+            {col.map(({ idx, offset }) => {
+              const m = mobs[idx]!;
+              const mobMeta = encounterMobs[idx];
+              const key = `mob:${idx}`;
+              const state = animStates[key] ?? "idle";
+              const isHit = hitFlash.has(key);
+              const isFocused = targetPickerIdx === idx;
+              const baseSprite =
+                m.combat_sprite_atlas?.east ??
+                mobMeta?.combat_sprite_atlas?.east ??
+                m.sprite_atlas?.east ??
+                mobMeta?.sprite_atlas?.east ??
+                m.sprite_atlas?.south ??
+                mobMeta?.sprite_atlas?.south ??
+                null;
+              const atlas =
+                m.combat_animation_atlas ??
+                mobMeta?.combat_animation_atlas ??
+                m.animation_atlas ??
+                mobMeta?.animation_atlas ??
+                null;
+              return (
+                <div
+                  key={idx}
+                  className={
+                    "relative flex flex-col items-center gap-1 transition-transform " +
+                    (isFocused ? "scale-[1.05]" : "")
+                  }
+                  style={{ transform: `translateY(${offset * 18}px)` }}
+                >
+                  <div
+                    className={
+                      "relative aspect-square w-full max-w-[180px] " +
+                      (isFocused ? "drop-shadow-[0_0_8px_rgba(252,211,77,0.85)]" : "")
+                    }
+                  >
+                    {/* Pointing-arrow cursor for the picker. */}
+                    {isFocused ? (
+                      <span
+                        className="pointer-events-none absolute -left-5 top-1/2 -translate-y-1/2 text-2xl text-amber-300"
+                        style={{
+                          textShadow: "0 0 4px #000",
+                          animation: "abyssCursorBlink 0.7s steps(2) infinite",
+                        }}
+                      >
+                        ▶
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => onPickTarget(idx)}
+                      disabled={!m.alive || targetPickerIdx === null}
+                      className="absolute inset-0 cursor-pointer disabled:cursor-default"
+                      aria-label={mobMeta?.name_localized ?? m.name}
+                    >
+                      <span className="sr-only">{mobMeta?.name_localized ?? m.name}</span>
+                    </button>
+                    <CharacterStage
+                      baseSprite={baseSprite}
+                      atlas={atlas}
+                      facing="east"
+                      state={state}
+                      flash={isHit}
+                      grayscale={!m.alive}
+                      flipFallback={MOB_SPRITE_FLIP[m.id] ?? false}
+                      debugLabel={m.name}
+                    />
+                    {floats
+                      .filter((f) => f.target === key)
+                      .map((f) => (
+                        <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
+                      ))}
+                  </div>
+                  <div className="w-full max-w-[150px]">
+                    <div className="flex items-baseline justify-between text-[9px] font-semibold text-white drop-shadow">
+                      <span className="truncate">{mobMeta?.name_localized ?? m.name}</span>
+                      <span className="tabular-nums text-abyss-fog">{m.hp}/{m.max_hp}</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded bg-abyss-coal/70 ring-1 ring-white/25">
+                      <div
+                        className="h-full bg-rose-500 transition-all duration-300"
+                        style={{ width: `${m.max_hp > 0 ? Math.max(0, (m.hp / m.max_hp) * 100) : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+function enemyLayout(n: number): Array<{ col: 0 | 1; offset: number }> {
+  if (n <= 1) return [{ col: 0, offset: 0 }];
+  if (n === 2) return [
+    { col: 0, offset: -1 },
+    { col: 0, offset: 1 },
+  ];
+  if (n === 3) return [
+    { col: 0, offset: 0 },
+    { col: 1, offset: -1 },
+    { col: 1, offset: 1 },
+  ];
+  if (n === 4) return [
+    { col: 0, offset: -1 },
+    { col: 0, offset: 1 },
+    { col: 1, offset: -1 },
+    { col: 1, offset: 1 },
+  ];
+  // 5+: 4-mob template + extras stacked at the back.
+  const base = enemyLayout(4);
+  for (let i = 4; i < n; i++) {
+    base.push({ col: 0, offset: i - 4 });
+  }
+  return base;
 }
 
 /** FFVI-style command box — blue gradient fill, white rounded border,
