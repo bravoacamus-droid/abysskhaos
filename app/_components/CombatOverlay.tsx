@@ -294,7 +294,13 @@ export function CombatOverlay({
         }
         await sleep(300);
       } else if (entry.kind === "death") {
-        setEntityAnim(entry.actor, "death");
+        // Mobs skip the death animation entirely — the dissolve-fade
+        // overlay already reads as the death beat, and an extra
+        // anim on top muddies the moment. Player gets the full
+        // kneel-on-sword death.
+        if (entry.actor === "player") {
+          setEntityAnim(entry.actor, "death");
+        }
         await sleep(600);
       } else if (entry.kind === "victory") {
         setEntityAnim("player", "victory");
@@ -759,7 +765,7 @@ function EnemyCluster({
                 >
                   <div
                     className={
-                      "relative aspect-square w-full max-w-[340px] " +
+                      "relative aspect-square w-full max-w-[400px] " +
                       (isFocused ? "drop-shadow-[0_0_8px_rgba(252,211,77,0.85)] " : "") +
                       (lungeKeys.has(key) ? "abyss-lunge-right" : "")
                     }
