@@ -75,7 +75,9 @@ const ACTIONS: { kind: PlayerActionKind; labelKey: string; needsTarget: boolean 
  *  faces RIGHT naturally so no flip needed; the map is kept as a
  *  hook for future mobs whose generated east still reads wrong. */
 const MOB_SPRITE_FLIP: Record<string, boolean> = {
-  // centaur_warrior: false (v2 sprite faces right correctly)
+  // The lizardman south-east generation reads as facing LEFT in the
+  // rendered sprite; flip it horizontally so it faces the player.
+  lizardman_archer: true,
 };
 
 type Props = {
@@ -124,6 +126,39 @@ export function CombatOverlay({
     initialSession.mobs.forEach((_, i) => { s[`mob:${i}`] = "idle"; });
     return s;
   });
+  /** Lunge state — entities apply a CSS step-back-step-forward
+   *  transform while they're swinging. Keyed same as animStates. */
+  const [lungeKeys, setLungeKeys] = useState<Set<string>>(new Set());
+
+  /** Pre-fetch every combat frame the FIRST time this overlay mounts
+   *  so the browser has them cached before playAppended starts cycling
+   *  src. Without this the first combat shows nothing animated — the
+   *  img swaps point to URLs that are still being downloaded. */
+  useEffect(() => {
+    const urls: string[] = [];
+    const collect = (atlas?: Record<string, Record<string, string[]>> | null) => {
+      if (!atlas) return;
+      for (const state of Object.values(atlas)) {
+        for (const frames of Object.values(state)) {
+          for (const u of frames) urls.push(u);
+        }
+      }
+    };
+    collect(player.combat_animation_atlas);
+    collect(player.animation_atlas);
+    mobs.forEach((m) => {
+      collect(m.combat_animation_atlas);
+      collect(m.animation_atlas);
+    });
+    initialSession.mobs.forEach((m) => {
+      collect(m.combat_animation_atlas);
+      collect(m.animation_atlas);
+    });
+    for (const u of new Set(urls)) {
+      const img = new Image();
+      img.src = u;
+    }
+  }, [player, mobs, initialSession.mobs]);
 
   const currentTurn: CombatTurn =
     session.turn_order[session.turn_idx % session.turn_order.length] ?? { kind: "player" };
@@ -156,6 +191,28 @@ export function CombatOverlay({
     }, HIT_FLASH_MS);
   }
 
+  /** Add/remove a lunge key + auto-clear after the keyframe duration. */
+  function pulseLunge(key: string, durMs: number) {
+    setLungeKeys((prev) => new Set([...prev, key]));
+    window.setTimeout(() => {
+      setLungeKeys((prev) => {
+        const n = new Set(prev);
+        n.delete(key);
+        return n;
+      });
+    }, durMs);
+  }
+  /** Spawn a one-shot slash FX over the target. */
+  const [slashFx, setSlashFx] = useState<Array<{ id: number; target: string }>>([]);
+  const slashIdRef = useRef(1);
+  function pushSlash(target: string) {
+    const id = slashIdRef.current++;
+    setSlashFx((prev) => [...prev, { id, target }]);
+    window.setTimeout(() => {
+      setSlashFx((prev) => prev.filter((s) => s.id !== id));
+    }, 380);
+  }
+
   /** Walk through the server-resolved log entries and animate them
    *  one-by-one so the user actually SEES the swing connect + the
    *  target flinch. */
@@ -165,24 +222,32 @@ export function CombatOverlay({
       if (entry.kind === "attack") {
         const isSkill = entry.action_kind === "skill" && entry.actor === "player";
         const actorState: AnimState = isSkill ? "skill" : "attack";
-        // Hold the attack pose for a beat over the full frame count
-        // so the user clearly registers the swing.
-        const frameCount = isSkill ? 8 : 6;
-        const actorDurMs = Math.round((frameCount / ANIM_HINT[actorState].fps) * 1000);
+        // The v3-custom attack anims are 11 frames; at 10 fps that's
+        // ~1100 ms. Give the swing the FULL frame budget plus buffer
+        // so the user always sees every frame land — the prior 600ms
+        // hard-cap reset to idle before frames 4-10 ever rendered,
+        // which is why "no se ve la animación de ataque".
+        const ATTACK_BUDGET_MS = 1200;
         setEntityAnim(entry.actor, actorState);
-        // Pre-impact pause so we can SEE the wind-up.
-        await sleep(Math.round(actorDurMs * 0.55));
+        // Actor lunges forward toward target across the whole swing.
+        pulseLunge(entry.actor, ATTACK_BUDGET_MS);
+        // Wind-up: 60% of the budget so frames 0-6 (anticipation +
+        // first slash arc) play out.
+        await sleep(Math.round(ATTACK_BUDGET_MS * 0.6));
+        // Impact: target flinches now.
         setEntityAnim(entry.target, "hurt");
         flashEntity(entry.target);
         pushFloat(entry.target, entry.dmg, "damage");
-        // Hold the connect + flinch beat.
-        await sleep(Math.round(actorDurMs * 0.45) + 350);
+        if (!isSkill) pushSlash(entry.target);
+        // Follow-through: remaining 40% of the budget so frames 7-10
+        // (recovery / return to ready) finish.
+        await sleep(Math.round(ATTACK_BUDGET_MS * 0.4));
         setAnimStates((prev) => ({
           ...prev,
           [entry.actor]:  prev[entry.actor]  === "death" ? "death" : "idle",
           [entry.target]: prev[entry.target] === "death" ? "death" : "idle",
         }));
-        await sleep(120);
+        await sleep(150);
       } else if (entry.kind === "miss") {
         setEntityAnim(entry.actor, "attack");
         await sleep(280);
@@ -313,6 +378,8 @@ export function CombatOverlay({
               animStates={animStates}
               hitFlash={hitFlash}
               floats={floats}
+              slashFx={slashFx}
+              lungeKeys={lungeKeys}
               targetPickerIdx={targetPicker?.targetIdx ?? null}
               onPickTarget={(idx) => {
                 if (targetPicker && session.mobs[idx]?.alive) {
@@ -322,9 +389,11 @@ export function CombatOverlay({
             />
           </div>
 
-          {/* Player — centered. */}
+          {/* Player — centered. Lunges LEFT (toward enemies) on attack. */}
           <div className="flex items-center justify-center">
-            <div className="relative aspect-square w-full max-w-[320px]">
+            <div
+              className={"relative aspect-square w-full max-w-[320px] " + (lungeKeys.has("player") ? "abyss-lunge-left" : "")}
+            >
               {(() => {
                 const csSouthWest = player.combat_sprite_atlas?.["south-west"] ?? null;
                 const csWest = player.combat_sprite_atlas?.west ?? null;
@@ -363,10 +432,35 @@ export function CombatOverlay({
                 .map((f) => (
                   <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
                 ))}
+              {slashFx
+                .filter((s) => s.target === "player")
+                .map((s) => (
+                  <SlashBurst key={s.id} />
+                ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Lunge + slash keyframes — scoped to this overlay. */}
+      <style>{`
+        @keyframes abyssLungeLeft {
+          0%   { transform: translateX(0); }
+          15%  { transform: translateX(16px); }
+          45%  { transform: translateX(-44px); }
+          75%  { transform: translateX(-24px); }
+          100% { transform: translateX(0); }
+        }
+        @keyframes abyssLungeRight {
+          0%   { transform: translateX(0); }
+          15%  { transform: translateX(-16px); }
+          45%  { transform: translateX(44px); }
+          75%  { transform: translateX(24px); }
+          100% { transform: translateX(0); }
+        }
+        .abyss-lunge-left  { animation: abyssLungeLeft 600ms ease-out; }
+        .abyss-lunge-right { animation: abyssLungeRight 600ms ease-out; }
+      `}</style>
 
       {/* FFVI-style bottom HUD: two blue-gradient boxes with white
           rounded borders. LEFT = command list with the blinking
@@ -536,6 +630,8 @@ function EnemyCluster({
   animStates,
   hitFlash,
   floats,
+  slashFx,
+  lungeKeys,
   targetPickerIdx,
   onPickTarget,
 }: {
@@ -544,6 +640,8 @@ function EnemyCluster({
   animStates: Record<string, AnimState>;
   hitFlash: Set<string>;
   floats: FloatingNumber[];
+  slashFx: Array<{ id: number; target: string }>;
+  lungeKeys: Set<string>;
   targetPickerIdx: number | null;
   onPickTarget: (idx: number) => void;
 }) {
@@ -598,7 +696,8 @@ function EnemyCluster({
                   <div
                     className={
                       "relative aspect-square w-full max-w-[280px] " +
-                      (isFocused ? "drop-shadow-[0_0_8px_rgba(252,211,77,0.85)]" : "")
+                      (isFocused ? "drop-shadow-[0_0_8px_rgba(252,211,77,0.85)] " : "") +
+                      (lungeKeys.has(key) ? "abyss-lunge-right" : "")
                     }
                   >
                     {/* Pointing-arrow cursor for the picker. */}
@@ -632,12 +731,18 @@ function EnemyCluster({
                       flash={isHit}
                       grayscale={!m.alive}
                       flipFallback={MOB_SPRITE_FLIP[m.id] ?? false}
+                      staticIdle={true}
                       debugLabel={m.name}
                     />
                     {floats
                       .filter((f) => f.target === key)
                       .map((f) => (
                         <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
+                      ))}
+                    {slashFx
+                      .filter((s) => s.target === key)
+                      .map((s) => (
+                        <SlashBurst key={s.id} />
                       ))}
                   </div>
                   <div className="w-full max-w-[200px]">
@@ -787,6 +892,7 @@ function CharacterStage({
   flash,
   grayscale,
   flipFallback,
+  staticIdle,
   debugLabel,
 }: {
   baseSprite: string | null;
@@ -796,6 +902,10 @@ function CharacterStage({
   flash: boolean;
   grayscale: boolean;
   flipFallback?: boolean;
+  /** When true, only show frame 0 of the idle anim (no loop). Other
+   *  states still animate. User wanted mobs to stay still while idle
+   *  so the attack reads as the main motion. */
+  staticIdle?: boolean;
   debugLabel?: string;
 }) {
   const directFrames = atlas?.[state]?.[facing] ?? null;
@@ -803,6 +913,9 @@ function CharacterStage({
   // character visible while still animating in place.
   const fallbackFrames = atlas?.idle?.[facing] ?? null;
   const frames = directFrames ?? fallbackFrames ?? null;
+  // staticIdle: pretend the idle loop is a single-frame array so the
+  // interval below skips it entirely.
+  const renderFrames = staticIdle && state === "idle" && frames ? [frames[0]!] : frames;
   const hint = ANIM_HINT[state];
 
   const [frameIdx, setFrameIdx] = useState(0);
@@ -816,10 +929,10 @@ function CharacterStage({
   }, [state]);
 
   useEffect(() => {
-    if (!frames || frames.length <= 1) return;
+    if (!renderFrames || renderFrames.length <= 1) return;
     const intervalMs = Math.max(40, Math.round(1000 / hint.fps));
     const id = window.setInterval(() => {
-      const last = frames.length - 1;
+      const last = renderFrames.length - 1;
       const cur = frameIdxRef.current;
       if (cur < last) {
         frameIdxRef.current = cur + 1;
@@ -837,8 +950,8 @@ function CharacterStage({
   }, [frames, hint.fps, hint.loop, hint.hold]);
 
   const src =
-    frames && frames.length > 0
-      ? (frames[Math.min(frameIdx, frames.length - 1)] ?? baseSprite ?? "")
+    renderFrames && renderFrames.length > 0
+      ? (renderFrames[Math.min(frameIdx, renderFrames.length - 1)] ?? baseSprite ?? "")
       : (baseSprite ?? "");
   if (!src) {
     return (
@@ -860,6 +973,41 @@ function CharacterStage({
       }
       style={{ imageRendering: "pixelated", transform }}
     />
+  );
+}
+
+/** One-shot slash burst overlay — rendered when a physical hit
+ *  lands. Quick diagonal flash + bright streaks, lifetime ~380ms. */
+function SlashBurst() {
+  return (
+    <span
+      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+      style={{ animation: "abyssSlashBurst 380ms ease-out forwards" }}
+    >
+      <svg viewBox="0 0 100 100" className="h-3/4 w-3/4" aria-hidden>
+        <defs>
+          <linearGradient id="slashG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="white" stopOpacity="0" />
+            <stop offset="40%" stopColor="white" stopOpacity="0.95" />
+            <stop offset="60%" stopColor="#fef3c7" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="white" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <g transform="rotate(-22 50 50)">
+          <rect x="10" y="46" width="80" height="8" rx="4" fill="url(#slashG)" />
+          <rect x="14" y="42" width="72" height="2" rx="1" fill="white" opacity="0.85" />
+          <rect x="14" y="56" width="72" height="2" rx="1" fill="white" opacity="0.85" />
+        </g>
+      </svg>
+      <style>{`
+        @keyframes abyssSlashBurst {
+          0%   { opacity: 0; transform: scale(0.6) rotate(-8deg); }
+          25%  { opacity: 1; transform: scale(1.05) rotate(0deg); }
+          70%  { opacity: 0.9; transform: scale(1.08) rotate(2deg); }
+          100% { opacity: 0; transform: scale(1.1) rotate(4deg); }
+        }
+      `}</style>
+    </span>
   );
 }
 
