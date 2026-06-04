@@ -324,7 +324,7 @@ export function CombatOverlay({
 
           {/* Player — centered. */}
           <div className="flex items-center justify-center">
-            <div className="relative aspect-square w-full max-w-[260px]">
+            <div className="relative aspect-square w-full max-w-[320px]">
               {(() => {
                 const csWest = player.combat_sprite_atlas?.west ?? null;
                 const csEast = player.combat_sprite_atlas?.east ?? null;
@@ -579,7 +579,7 @@ function EnemyCluster({
                 >
                   <div
                     className={
-                      "relative aspect-square w-full max-w-[180px] " +
+                      "relative aspect-square w-full max-w-[280px] " +
                       (isFocused ? "drop-shadow-[0_0_8px_rgba(252,211,77,0.85)]" : "")
                     }
                   >
@@ -620,7 +620,7 @@ function EnemyCluster({
                         <FloatingDamage key={f.id} value={f.value} variant={f.variant} />
                       ))}
                   </div>
-                  <div className="w-full max-w-[150px]">
+                  <div className="w-full max-w-[200px]">
                     <div className="flex items-baseline justify-between text-[9px] font-semibold text-white drop-shadow">
                       <span className="truncate">{mobMeta?.name_localized ?? m.name}</span>
                       <span className="tabular-nums text-abyss-fog">{m.hp}/{m.max_hp}</span>

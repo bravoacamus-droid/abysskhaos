@@ -48,8 +48,10 @@ const SPECS: CharSpec[] = [
     characterId: "0eb4fd61-4d4c-43f9-908a-371038c0faec",
     facing: "west",
     anims: [
-      { key: "idle",   animationId: "85c6f2d1-d110-479e-be0a-dfd5ca9488e3", frameCount: 8 },
-      { key: "attack", animationId: "80dacb7a-55b7-4f86-9c10-b0d86262ce73", frameCount: 6 },
+      // v3 custom: slow paused combat idle (8 animated + 1 reference).
+      { key: "idle",   animationId: "0da85b05-a194-4733-9def-24029c85d1fe", frameCount: 9 },
+      // v3 custom: powerful overhead swing in 10 distinct frames + 1 ref.
+      { key: "attack", animationId: "4f9f978e-a66e-45e2-beaa-5a7d1359ed9e", frameCount: 11 },
       { key: "hurt",   animationId: "818fd9c6-cf94-4efc-a22e-b81d7b4e3e7a", frameCount: 6 },
       { key: "death",  animationId: "8a2cb427-ba3f-4923-92e0-c9bbebecafc9", frameCount: 7 },
     ],
@@ -61,8 +63,9 @@ const SPECS: CharSpec[] = [
     characterId: "189a375c-ff05-4611-b008-7f371f29b7f4",
     facing: "east",
     anims: [
-      { key: "idle",   animationId: "47523e3a-71e7-43d8-af0d-2bb3f7adb7bd", frameCount: 8 },
-      { key: "attack", animationId: "d1f4334d-6bb4-4f0a-9d01-37d9727a697b", frameCount: 6 },
+      // v3 custom centaur idle + charge attack with multi-frame motion.
+      { key: "idle",   animationId: "617cf5f9-1804-4a78-ba64-4faba9b86a1d", frameCount: 9 },
+      { key: "attack", animationId: "7ec56e6e-c2bc-435e-b46a-058090f4adc9", frameCount: 11 },
       { key: "hurt",   animationId: "819e058d-c394-425e-b253-c5bd67e5ca8c", frameCount: 6 },
       { key: "death",  animationId: "66688d0c-0b22-45c8-aa45-307987933e26", frameCount: 7 },
     ],
@@ -74,9 +77,9 @@ const SPECS: CharSpec[] = [
     characterId: "b210c895-d63b-4aab-a9ce-b4ddff94d41d",
     facing: "east",
     anims: [
-      { key: "idle",   animationId: "a91f3c13-c2b7-4b52-9383-d89042189bfb", frameCount: 8 },
-      // bow_shoot_combat is custom v3 (1 ref + 8 animated = 9 total).
-      { key: "attack", animationId: "91217a83-81fe-4c38-a731-7c77762671b8", frameCount: 9 },
+      // v3 custom archer idle + bow shot with full multi-frame draw+release.
+      { key: "idle",   animationId: "592e0310-50ed-4318-a06d-6002d791ed1c", frameCount: 9 },
+      { key: "attack", animationId: "19832ed2-f045-4021-b38b-31d3a39fd5f3", frameCount: 11 },
       { key: "hurt",   animationId: "f2555cb0-2327-4857-883f-2bcbcc2fff9b", frameCount: 6 },
       { key: "death",  animationId: "bc002148-57cd-49e0-be74-17adb4191fb1", frameCount: 7 },
     ],
