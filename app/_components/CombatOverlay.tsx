@@ -44,6 +44,7 @@ type FloatingNumber = {
 
 type AnimState =
   | "idle"
+  | "weakened"
   | "attack"
   | "skill"
   | "hurt"
@@ -53,15 +54,24 @@ type AnimState =
   | "victory";
 
 const ANIM_HINT: Record<AnimState, { fps: number; loop: boolean; hold: boolean }> = {
-  idle:    { fps: 6,  loop: true,  hold: false },
-  attack:  { fps: 10, loop: false, hold: false },
-  skill:   { fps: 10, loop: false, hold: false },
-  hurt:    { fps: 12, loop: false, hold: false },
-  dodge:   { fps: 14, loop: false, hold: false },
-  block:   { fps: 8,  loop: false, hold: true  },
-  death:   { fps: 8,  loop: false, hold: true  },
-  victory: { fps: 6,  loop: true,  hold: false },
+  idle:     { fps: 6,  loop: true,  hold: false },
+  weakened: { fps: 5,  loop: true,  hold: false },
+  attack:   { fps: 10, loop: false, hold: false },
+  skill:    { fps: 10, loop: false, hold: false },
+  hurt:     { fps: 12, loop: false, hold: false },
+  dodge:    { fps: 14, loop: false, hold: false },
+  block:    { fps: 8,  loop: false, hold: true  },
+  death:    { fps: 8,  loop: false, hold: true  },
+  victory:  { fps: 6,  loop: true,  hold: false },
 };
+
+/** Below this HP fraction the player's resting state flips from
+ *  'idle' to 'weakened' (heavier breathing, hunched pose). */
+const LOW_HP_THRESHOLD = 0.25;
+
+/** Mob IDs that fight at range — their attacks spawn a flying
+ *  projectile FX from their position to the player. */
+const RANGED_MOB_IDS = new Set(["lizardman_archer"]);
 
 const ACTIONS: { kind: PlayerActionKind; labelKey: string; needsTarget: boolean }[] = [
   { kind: "attack", labelKey: "combat.action_attack", needsTarget: true  },
@@ -212,6 +222,18 @@ export function CombatOverlay({
       setSlashFx((prev) => prev.filter((s) => s.id !== id));
     }, 380);
   }
+  /** Spawn a flying arrow projectile across the battlefield. The
+   *  fromMobIdx is used to map the spawn x position to the mob's
+   *  cluster; target is always the player (right side). */
+  const [projectiles, setProjectiles] = useState<Array<{ id: number; fromMobIdx: number }>>([]);
+  const projectileIdRef = useRef(1);
+  function pushProjectile(fromMobIdx: number, lifetimeMs: number) {
+    const id = projectileIdRef.current++;
+    setProjectiles((prev) => [...prev, { id, fromMobIdx }]);
+    window.setTimeout(() => {
+      setProjectiles((prev) => prev.filter((p) => p.id !== id));
+    }, lifetimeMs);
+  }
 
   /** Walk through the server-resolved log entries and animate them
    *  one-by-one so the user actually SEES the swing connect + the
@@ -222,23 +244,30 @@ export function CombatOverlay({
       if (entry.kind === "attack") {
         const isSkill = entry.action_kind === "skill" && entry.actor === "player";
         const actorState: AnimState = isSkill ? "skill" : "attack";
-        // The v3-custom attack anims are 11 frames; at 10 fps that's
-        // ~1100 ms. Give the swing the FULL frame budget plus buffer
-        // so the user always sees every frame land — the prior 600ms
-        // hard-cap reset to idle before frames 4-10 ever rendered,
-        // which is why "no se ve la animación de ataque".
         const ATTACK_BUDGET_MS = 1200;
+        // Detect a ranged mob attack on the player → spawn projectile.
+        const actorIsRangedMob = (() => {
+          const m = entry.actor.match(/^mob:(\d+)$/);
+          if (!m) return null;
+          const idx = Number(m[1]);
+          const mobId = session.mobs[idx]?.id;
+          return mobId && RANGED_MOB_IDS.has(mobId) ? idx : null;
+        })();
         setEntityAnim(entry.actor, actorState);
-        // Actor lunges forward toward target across the whole swing.
         pulseLunge(entry.actor, ATTACK_BUDGET_MS);
         // Wind-up: 60% of the budget so frames 0-6 (anticipation +
         // first slash arc) play out.
         await sleep(Math.round(ATTACK_BUDGET_MS * 0.6));
-        // Impact: target flinches now.
+        // For ranged: arrow flies during the impact window (~320ms),
+        // arriving roughly at the hurt beat.
+        if (actorIsRangedMob !== null) {
+          pushProjectile(actorIsRangedMob, 320);
+          await sleep(280);
+        }
         setEntityAnim(entry.target, "hurt");
         flashEntity(entry.target);
         pushFloat(entry.target, entry.dmg, "damage");
-        if (!isSkill) pushSlash(entry.target);
+        if (!isSkill && actorIsRangedMob === null) pushSlash(entry.target);
         // Follow-through: remaining 40% of the budget so frames 7-10
         // (recovery / return to ready) finish.
         await sleep(Math.round(ATTACK_BUDGET_MS * 0.4));
@@ -414,13 +443,25 @@ export function CombatOverlay({
                   : combatAtlasHasWest ? "west"
                   : "east";
                 const flip = !combatAtlasHasSouthWest && !combatAtlasHasWest && (!!csEast || !!topSouth || !!player.combat_animation_atlas);
+                // Auto-swap the resting state to 'weakened' once the
+                // player drops below LOW_HP_THRESHOLD. Other states
+                // (attack/skill/hurt/block/death) are untouched —
+                // they only act while the action is playing.
+                const rawState = animStates["player"] ?? "idle";
+                const hpFrac = session.player_max_hp > 0
+                  ? session.player_hp / session.player_max_hp
+                  : 1;
+                const playerState: AnimState =
+                  rawState === "idle" && hpFrac < LOW_HP_THRESHOLD
+                    ? "weakened"
+                    : rawState;
                 return (
                   <CharacterStage
                     baseSprite={baseSprite}
                     atlas={player.combat_animation_atlas ?? player.animation_atlas ?? null}
                     facing={facing}
                     flipFallback={flip}
-                    state={animStates["player"] ?? "idle"}
+                    state={playerState}
                     flash={hitFlash.has("player")}
                     grayscale={false}
                     debugLabel={player.name}
@@ -439,10 +480,17 @@ export function CombatOverlay({
                 ))}
             </div>
           </div>
+          {/* Projectiles — absolutely positioned over the whole
+              battlefield, fly from the LEFT (enemy cluster) to the
+              RIGHT (player). Rendered here so they're not clipped by
+              either entity slot. */}
+          {projectiles.map((p) => (
+            <ProjectileArrow key={p.id} />
+          ))}
         </div>
       </div>
 
-      {/* Lunge + slash keyframes — scoped to this overlay. */}
+      {/* Lunge + slash + projectile keyframes — scoped to this overlay. */}
       <style>{`
         @keyframes abyssLungeLeft {
           0%   { transform: translateX(0); }
@@ -460,6 +508,12 @@ export function CombatOverlay({
         }
         .abyss-lunge-left  { animation: abyssLungeLeft 600ms ease-out; }
         .abyss-lunge-right { animation: abyssLungeRight 600ms ease-out; }
+        @keyframes abyssArrowFly {
+          0%   { left: 22%; opacity: 0; transform: translateY(-50%) scaleX(0.6); }
+          12%  { opacity: 1; }
+          85%  { opacity: 1; }
+          100% { left: 78%; opacity: 0.2; transform: translateY(-50%) scaleX(1); }
+        }
       `}</style>
 
       {/* FFVI-style bottom HUD: two blue-gradient boxes with white
@@ -973,6 +1027,28 @@ function CharacterStage({
       }
       style={{ imageRendering: "pixelated", transform }}
     />
+  );
+}
+
+/** Flying arrow projectile — fires across the battlefield from
+ *  the enemy cluster (left) to the player (right). Lifetime ~320ms
+ *  matched to the playAppended impact-window sleep. The arrowhead
+ *  trails a faint cyan glow to match the lizardman's nocked-arrow
+ *  art. */
+function ProjectileArrow() {
+  return (
+    <span
+      className="pointer-events-none absolute top-1/2 z-10"
+      style={{
+        animation: "abyssArrowFly 320ms cubic-bezier(0.16, 0.84, 0.44, 1) forwards",
+      }}
+    >
+      <svg viewBox="0 0 64 12" className="h-3 w-16 drop-shadow-[0_0_4px_rgba(103,232,249,0.85)]" aria-hidden>
+        <line x1="0"  y1="6" x2="44" y2="6" stroke="#a78bfa" strokeWidth="2" />
+        <polygon points="44,2 56,6 44,10" fill="#67e8f9" />
+        <polygon points="0,2 6,6 0,10" fill="#a78bfa" />
+      </svg>
+    </span>
   );
 }
 
