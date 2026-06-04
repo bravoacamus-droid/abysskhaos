@@ -326,13 +326,25 @@ export function CombatOverlay({
           <div className="flex items-center justify-center">
             <div className="relative aspect-square w-full max-w-[320px]">
               {(() => {
+                const csSouthWest = player.combat_sprite_atlas?.["south-west"] ?? null;
                 const csWest = player.combat_sprite_atlas?.west ?? null;
                 const csEast = player.combat_sprite_atlas?.east ?? null;
                 const topSouth = player.sprite_atlas?.south ?? null;
-                const baseSprite = csWest ?? csEast ?? topSouth ?? null;
+                const baseSprite = csSouthWest ?? csWest ?? csEast ?? topSouth ?? null;
+                // Octopath HD-2D convention: player on RIGHT half
+                // facing toward enemies on the left. The 3/4 angle
+                // for that is "south-west" (face + both shoulders
+                // visible, turned toward camera + slightly left).
+                // We prefer the new south-west key, fall back to the
+                // older west-only atlas, then flip the east variant
+                // as last resort.
+                const combatAtlasHasSouthWest = !!player.combat_animation_atlas?.idle?.["south-west"];
                 const combatAtlasHasWest = !!player.combat_animation_atlas?.idle?.west;
-                const facing: "east" | "west" = combatAtlasHasWest ? "west" : "east";
-                const flip = !combatAtlasHasWest && (!!csEast || !!topSouth || !!player.combat_animation_atlas);
+                const facing: "east" | "west" | "south-east" | "south-west" =
+                  combatAtlasHasSouthWest ? "south-west"
+                  : combatAtlasHasWest ? "west"
+                  : "east";
+                const flip = !combatAtlasHasSouthWest && !combatAtlasHasWest && (!!csEast || !!topSouth || !!player.combat_animation_atlas);
                 return (
                   <CharacterStage
                     baseSprite={baseSprite}
@@ -554,7 +566,13 @@ function EnemyCluster({
               const state = animStates[key] ?? "idle";
               const isHit = hitFlash.has(key);
               const isFocused = targetPickerIdx === idx;
+              // Octopath HD-2D convention: enemies stand on the LEFT
+              // half of the screen facing the player. The proper 3/4
+              // angle is "south-east" (face + both shoulders visible,
+              // turned toward the camera + slightly to the right).
               const baseSprite =
+                m.combat_sprite_atlas?.["south-east"] ??
+                mobMeta?.combat_sprite_atlas?.["south-east"] ??
                 m.combat_sprite_atlas?.east ??
                 mobMeta?.combat_sprite_atlas?.east ??
                 m.sprite_atlas?.east ??
@@ -607,7 +625,9 @@ function EnemyCluster({
                     <CharacterStage
                       baseSprite={baseSprite}
                       atlas={atlas}
-                      facing="east"
+                      // Prefer new Octopath 3/4 south-east when atlas
+                      // has it; legacy east still works.
+                      facing={(atlas?.idle?.["south-east"] ? "south-east" : "east")}
                       state={state}
                       flash={isHit}
                       grayscale={!m.alive}
@@ -771,7 +791,7 @@ function CharacterStage({
 }: {
   baseSprite: string | null;
   atlas: Record<string, Record<string, string[]>> | null;
-  facing: "east" | "west";
+  facing: "east" | "west" | "south-east" | "south-west";
   state: AnimState;
   flash: boolean;
   grayscale: boolean;
