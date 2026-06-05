@@ -140,41 +140,80 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     );
   }
 
-  // If the target slot is already occupied, bounce the occupant into
-  // the first free inventory slot. Read state, find free slot, then
-  // do the two updates in sequence (no SQL transaction yet; the worst
-  // case is the user briefly owning two items in flight).
-  const { data: existing } = await supabase
-    .from("character_items")
-    .select("id")
-    .eq("character_id", character.id)
-    .eq("equipped_slot", targetSlot)
-    .maybeSingle();
-  if (existing && existing.id !== charItem.id) {
-    const { data: occupiedRows } = await supabase
+  // Helper: bounce whatever's in `slotKey` to the first free inventory
+  // slot. Used both for the normal target-slot bounce AND for the
+  // 2H-handedness conflicts below.
+  const characterId = character.id as string;
+  const skipCharItemId = charItem.id as string;
+  async function bounceSlotToInventory(slotKey: string): Promise<NextResponse | null> {
+    const { data: occupant } = await supabase
+      .from("character_items")
+      .select("id")
+      .eq("character_id", characterId)
+      .eq("equipped_slot", slotKey)
+      .maybeSingle();
+    if (!occupant || occupant.id === skipCharItemId) return null;
+    const { data: occRows } = await supabase
       .from("character_items")
       .select("inventory_slot")
-      .eq("character_id", character.id)
+      .eq("character_id", characterId)
       .not("inventory_slot", "is", null);
-    const occupied = new Set((occupiedRows ?? []).map((r) => r.inventory_slot as number));
+    const occupied = new Set((occRows ?? []).map((r) => r.inventory_slot as number));
     let firstFree = -1;
     for (let i = 0; i < TOTAL_INVENTORY_SLOTS; i++) {
-      if (!occupied.has(i)) {
-        firstFree = i;
-        break;
-      }
+      if (!occupied.has(i)) { firstFree = i; break; }
     }
     if (firstFree === -1) {
       return NextResponse.json({ error: "INVENTORY_FULL_FOR_SWAP" }, { status: 409 });
     }
-    const { error: bounceErr } = await supabase
+    const { error: bErr } = await supabase
       .from("character_items")
       .update({ inventory_slot: firstFree, equipped_slot: null })
-      .eq("id", existing.id);
-    if (bounceErr) {
-      return NextResponse.json({ error: "DB_FAILED", detail: bounceErr.message }, { status: 500 });
+      .eq("id", occupant.id);
+    if (bErr) {
+      return NextResponse.json({ error: "DB_FAILED", detail: bErr.message }, { status: 500 });
+    }
+    return null;
+  }
+
+  // 1) Two-handed weapon EXCLUSIVITY (real combat-rule constraint).
+  //    - Equipping a 2H weapon to main_hand → off_hand MUST be empty.
+  //    - Equipping ANYTHING to off_hand (1H weapon or shield) → if
+  //      main_hand currently holds a 2H weapon, that 2H goes back to
+  //      inventory.
+  //    Both branches auto-bounce the conflicting slot instead of
+  //    erroring out so the swap feels frictionless.
+  const targetIsTwoHandedWeapon =
+    itemRow.item_type === "weapon" && w?.handedness === "two_handed" && targetSlot === "main_hand";
+  if (targetIsTwoHandedWeapon) {
+    const conflictResp = await bounceSlotToInventory("off_hand");
+    if (conflictResp) return conflictResp;
+  }
+  if (targetSlot === "off_hand") {
+    // Check the main_hand occupant's handedness.
+    const { data: mhRow } = await supabase
+      .from("character_items")
+      .select("item_id")
+      .eq("character_id", character.id)
+      .eq("equipped_slot", "main_hand")
+      .maybeSingle();
+    if (mhRow) {
+      const { data: mhWeapon } = await supabase
+        .from("weapons")
+        .select("handedness")
+        .eq("item_id", mhRow.item_id)
+        .maybeSingle();
+      if (mhWeapon?.handedness === "two_handed") {
+        const conflictResp = await bounceSlotToInventory("main_hand");
+        if (conflictResp) return conflictResp;
+      }
     }
   }
+
+  // 2) Standard target-slot bounce — kick out any current occupant of
+  //    the target slot itself.
+  const bounceResp = await bounceSlotToInventory(targetSlot);
+  if (bounceResp) return bounceResp;
 
   // Promote the item from inventory (or another equipped slot) to the target slot.
   const { error: upErr } = await supabase

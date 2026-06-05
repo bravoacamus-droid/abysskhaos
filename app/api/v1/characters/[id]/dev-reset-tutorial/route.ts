@@ -185,6 +185,49 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     }
   }
 
+  // 3c) Sanity-fix any invalid loadout left over from earlier sessions.
+  //     If main_hand holds a 2H weapon AND off_hand has something,
+  //     bounce the off_hand item back to inventory so the equip rules
+  //     hold next time the player swaps a weapon.
+  const { data: mhRow2 } = await supabase
+    .from("character_items")
+    .select("id, item_id")
+    .eq("character_id", character.id)
+    .eq("equipped_slot", "main_hand")
+    .maybeSingle();
+  if (mhRow2) {
+    const { data: mhWp } = await supabase
+      .from("weapons")
+      .select("handedness")
+      .eq("item_id", mhRow2.item_id)
+      .maybeSingle();
+    if (mhWp?.handedness === "two_handed") {
+      const { data: ohRow } = await supabase
+        .from("character_items")
+        .select("id")
+        .eq("character_id", character.id)
+        .eq("equipped_slot", "off_hand")
+        .maybeSingle();
+      if (ohRow) {
+        // Find a free inventory slot for the bounced item.
+        const { data: invList } = await supabase
+          .from("character_items")
+          .select("inventory_slot")
+          .eq("character_id", character.id)
+          .not("inventory_slot", "is", null);
+        const used = new Set<number>((invList ?? []).map((r) => r.inventory_slot as number));
+        let free = -1;
+        for (let i = 0; i < 40; i++) if (!used.has(i)) { free = i; break; }
+        if (free >= 0) {
+          await supabase
+            .from("character_items")
+            .update({ inventory_slot: free, equipped_slot: null })
+            .eq("id", ohRow.id);
+        }
+      }
+    }
+  }
+
   // 4) Recompute atk / def to reflect the (now guaranteed) sword.
   try {
     await recomputeAndPersistCombatStats(supabase, character.id);
