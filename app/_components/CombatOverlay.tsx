@@ -160,6 +160,27 @@ export function CombatOverlay({
     () => resolveWeaponFamily(equipped, itemCatalog),
     [equipped, itemCatalog],
   );
+  // TEMP debug: show the resolver inputs + result + atlas-hit check
+  // so we can verify per-weapon animation lookup live on screen.
+  const debugInfo = useMemo(() => {
+    const main = equipped.find((e) => e.slot === "main_hand");
+    const off = equipped.find((e) => e.slot === "off_hand");
+    const mainCat = main ? itemCatalog[main.item_id] : null;
+    const offCat = off ? itemCatalog[off.item_id] : null;
+    const atlas = player.combat_animation_atlas ?? null;
+    const idleKey = `idle_${weaponFamily}`;
+    const idleHit = !!atlas?.[idleKey]?.["south-west"];
+    return {
+      main: main?.item_id ?? "(none)",
+      mainWeaponClass: mainCat?.weapon?.weapon_class ?? "(no weapon)",
+      mainHandedness: mainCat?.weapon?.handedness ?? "(no weapon)",
+      off: off?.item_id ?? "(none)",
+      offIsShield: offCat?.armor?.slot === "off_hand_shield",
+      family: weaponFamily,
+      idleKey,
+      idleHit,
+    };
+  }, [equipped, itemCatalog, weaponFamily, player.combat_animation_atlas]);
   const [session, setSession] = useState<CombatSession>(initialSession);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -424,6 +445,18 @@ export function CombatOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-abyss-void text-white">
+      {/* TEMP debug overlay — shows resolved weapon family so we can
+          confirm the per-weapon animation lookup is working. Remove
+          once visual verification confirms. */}
+      <div
+        className="pointer-events-none absolute left-2 top-2 z-50 max-w-[360px] rounded bg-black/85 px-2 py-1 font-mono text-[10px] leading-tight text-white"
+        style={{ whiteSpace: "pre-line" }}
+      >
+        {`MAIN: ${debugInfo.main}\n` +
+         `  class=${debugInfo.mainWeaponClass} hand=${debugInfo.mainHandedness}\n` +
+         `OFF: ${debugInfo.off} shield=${debugInfo.offIsShield}\n` +
+         `family=${debugInfo.family}  ${debugInfo.idleKey} hit=${debugInfo.idleHit ? "YES" : "NO"}`}
+      </div>
       {/* Cinematic backdrop. */}
       <div className="pointer-events-none absolute inset-0">
         {backdropUrl ? (
