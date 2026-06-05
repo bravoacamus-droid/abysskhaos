@@ -323,7 +323,7 @@ export async function buildRoomStateForCharacter(
     name_localized: string;
     item_type: string;
     icon_path: string | null;
-    weapon: ({ handedness: string; base_atk: number } & ItemBonuses) | null;
+    weapon: ({ weapon_class: string; handedness: string; base_atk: number } & ItemBonuses) | null;
     armor: ({ slot: string; base_def: number } & ItemBonuses) | null;
     accessory: { slot: string } | null;
   };
@@ -346,7 +346,7 @@ export async function buildRoomStateForCharacter(
         .from("items_master")
         .select("id, name, item_type, icon_path")
         .in("id", ids),
-      supabase.from("weapons").select(`item_id, handedness, base_atk, ${BONUS_COLS}`).in("item_id", ids),
+      supabase.from("weapons").select(`item_id, weapon_class, handedness, base_atk, ${BONUS_COLS}`).in("item_id", ids),
       supabase.from("armor").select(`item_id, slot, base_def, ${BONUS_COLS}`).in("item_id", ids),
       supabase.from("accessories").select("item_id, slot").in("item_id", ids),
       locale !== "en"
@@ -378,7 +378,7 @@ export async function buildRoomStateForCharacter(
         item_type: m.item_type as string,
         icon_path: (m.icon_path as string | null) ?? null,
         weapon: w
-          ? { handedness: w.handedness as string, base_atk: w.base_atk as number, ...asBonuses(w as Record<string, unknown>) }
+          ? { weapon_class: w.weapon_class as string, handedness: w.handedness as string, base_atk: w.base_atk as number, ...asBonuses(w as Record<string, unknown>) }
           : null,
         armor: a
           ? { slot: a.slot as string, base_def: a.base_def as number, ...asBonuses(a as Record<string, unknown>) }

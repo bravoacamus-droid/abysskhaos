@@ -43,6 +43,18 @@ const R02_ROOM_INDEX = 2;
 const STARTER_SWORD = "starter_iron_sword";
 const MAIN_HAND = "main_hand";
 
+/** Extra weapons + shield seeded into the warrior's inventory at
+ *  dev-reset so the user can swap main_hand/off_hand from the
+ *  inventory UI and watch the combat animations change per family.
+ *  Sword + shield are equipped by default (testing combo of choice). */
+const TEST_WEAPONS: string[] = [
+  "starter_iron_axe",
+  "starter_iron_greataxe",
+  "starter_iron_greatsword",
+];
+const TEST_OFF_HAND = "starter_iron_shield";
+const OFF_HAND = "off_hand";
+
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const session = await resolveSession(_req);
   if (!session.ok) return session.response;
@@ -132,6 +144,43 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
           equipped_slot: MAIN_HAND,
           quantity: 1,
         });
+      if (insErr) return NextResponse.json({ error: "DB_FAILED", detail: insErr.message }, { status: 500 });
+    }
+  }
+
+  // 3b) Seed the alternate weapons + shield into inventory so the
+  //     user can test the weapon-family animation system. If they
+  //     already exist (any slot), skip. New ones go into the next
+  //     free inventory slot.
+  const wantedItems = [...TEST_WEAPONS, TEST_OFF_HAND];
+  const { data: existing, error: exErr } = await supabase
+    .from("character_items")
+    .select("id, item_id, inventory_slot, equipped_slot")
+    .eq("character_id", character.id)
+    .in("item_id", wantedItems);
+  if (exErr) return NextResponse.json({ error: "DB_FAILED", detail: exErr.message }, { status: 500 });
+  const haveIds = new Set<string>((existing ?? []).map((r) => r.item_id as string));
+  const missing = wantedItems.filter((id) => !haveIds.has(id));
+  if (missing.length > 0) {
+    // Find used inventory slots.
+    const { data: invRows, error: invListErr } = await supabase
+      .from("character_items")
+      .select("inventory_slot")
+      .eq("character_id", character.id)
+      .not("inventory_slot", "is", null);
+    if (invListErr) return NextResponse.json({ error: "DB_FAILED", detail: invListErr.message }, { status: 500 });
+    const used = new Set<number>((invRows ?? []).map((r) => r.inventory_slot as number));
+    const free: number[] = [];
+    for (let i = 0; i < 40 && free.length < missing.length; i++) if (!used.has(i)) free.push(i);
+    const inserts = missing.map((itemId, i) => ({
+      character_id: character.id,
+      item_id: itemId,
+      inventory_slot: free[i] ?? null,
+      equipped_slot: null,
+      quantity: 1,
+    }));
+    if (inserts.length > 0) {
+      const { error: insErr } = await supabase.from("character_items").insert(inserts);
       if (insErr) return NextResponse.json({ error: "DB_FAILED", detail: insErr.message }, { status: 500 });
     }
   }

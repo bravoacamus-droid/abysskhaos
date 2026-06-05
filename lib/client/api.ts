@@ -261,7 +261,7 @@ export type ItemCatalogEntry = {
   name_localized: string;
   item_type: "weapon" | "armor" | "accessory" | "consumable" | "gem" | "quest" | "misc";
   icon_path: string | null;
-  weapon: ({ handedness: string; base_atk: number } & ItemBonuses) | null;
+  weapon: ({ weapon_class: string; handedness: string; base_atk: number } & ItemBonuses) | null;
   armor: ({ slot: string; base_def: number } & ItemBonuses) | null;
   accessory: { slot: string } | null;
 };

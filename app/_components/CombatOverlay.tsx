@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { t, type Locale } from "@/lib/i18n";
 import type {
+  CharacterItem,
   CombatLogEntry,
   CombatSession,
   CombatTurn,
   EncounterMob,
+  ItemCatalogEntry,
   PlayerActionKind,
   RoomState,
 } from "@/lib/client/api";
@@ -94,6 +96,11 @@ type Props = {
   locale: Locale;
   session: CombatSession;
   player: RoomState["player"];
+  /** Player's equipped items + the catalog lookup so we can resolve
+   *  the active weapon family (sword_1h, axe_2h, sword_1h_shield, …)
+   *  and pick the right per-weapon animation set. */
+  equipped: CharacterItem[];
+  itemCatalog: Record<string, ItemCatalogEntry>;
   mobs: EncounterMob[];
   backdropUrl: string | null;
   onAction: (
@@ -103,6 +110,36 @@ type Props = {
   onClose: (outcome: "victory" | "defeat") => void;
 };
 
+/** Maps the equipped main-hand + off-hand to the warrior's
+ *  animation family key (used as the suffix in combat atlas keys —
+ *  e.g. attack_axe_2h, idle_sword_1h_shield).
+ *
+ *  Rule:
+ *   - two_handed weapon → <weapon_class>_2h
+ *   - one_handed weapon + shield → <weapon_class>_1h_shield
+ *   - one_handed weapon alone → <weapon_class>_1h
+ *   - nothing equipped → sword_1h (default legacy keys)
+ */
+function resolveWeaponFamily(
+  equipped: CharacterItem[],
+  catalog: Record<string, ItemCatalogEntry>,
+): string {
+  const main = equipped.find((e) => e.slot === "main_hand");
+  if (!main) return "sword_1h";
+  const w = catalog[main.item_id]?.weapon;
+  if (!w) return "sword_1h";
+  // Normalize weapon_class to our family naming (sword | axe). Any
+  // unknown class falls back to sword for graceful art reuse.
+  const wc = w.weapon_class === "axe" ? "axe" : "sword";
+  if (w.handedness === "two_handed") return `${wc}_2h`;
+  // One-handed: detect a shield in off-hand for the +shield variant.
+  const off = equipped.find((e) => e.slot === "off_hand");
+  const offIsShield = off
+    ? catalog[off.item_id]?.armor?.slot === "off_hand_shield"
+    : false;
+  return offIsShield ? `${wc}_1h_shield` : `${wc}_1h`;
+}
+
 const HIT_FLASH_MS = 320;
 const FLOAT_LIFETIME_MS = 1100;
 
@@ -110,11 +147,19 @@ export function CombatOverlay({
   locale,
   session: initialSession,
   player,
+  equipped,
+  itemCatalog,
   mobs,
   backdropUrl,
   onAction,
   onClose,
 }: Props) {
+  // Resolve the active weapon family once per render (cheap). Used
+  // to suffix atlas keys (idle_axe_2h, attack_sword_1h_shield, …).
+  const weaponFamily = useMemo(
+    () => resolveWeaponFamily(equipped, itemCatalog),
+    [equipped, itemCatalog],
+  );
   const [session, setSession] = useState<CombatSession>(initialSession);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -468,6 +513,7 @@ export function CombatOverlay({
                     facing={facing}
                     flipFallback={flip}
                     state={playerState}
+                    stateSuffix={weaponFamily}
                     flash={hitFlash.has("player")}
                     grayscale={false}
                     debugLabel={player.name}
@@ -959,6 +1005,7 @@ function CharacterStage({
   atlas,
   facing,
   state,
+  stateSuffix,
   flash,
   grayscale,
   flipFallback,
@@ -969,6 +1016,11 @@ function CharacterStage({
   atlas: Record<string, Record<string, string[]>> | null;
   facing: "east" | "west" | "south-east" | "south-west";
   state: AnimState;
+  /** Optional suffix tagged onto the state key for per-weapon
+   *  animations (e.g. attack + sword_2h → attack_sword_2h). Falls
+   *  back to the unsuffixed key when the suffixed one is missing,
+   *  so single-family chars (mobs) ignore this prop. */
+  stateSuffix?: string;
   flash: boolean;
   grayscale: boolean;
   flipFallback?: boolean;
@@ -978,10 +1030,21 @@ function CharacterStage({
   staticIdle?: boolean;
   debugLabel?: string;
 }) {
-  const directFrames = atlas?.[state]?.[facing] ?? null;
+  // Per-weapon key first (e.g. attack_axe_2h); fall back to the
+  // generic state key (attack) which serves as the sword_1h default.
+  const suffixedKey = stateSuffix ? `${state}_${stateSuffix}` : null;
+  const directFrames =
+    (suffixedKey ? atlas?.[suffixedKey]?.[facing] : null) ??
+    atlas?.[state]?.[facing] ??
+    null;
   // Fall back to idle frames when the state itself has none — keeps the
-  // character visible while still animating in place.
-  const fallbackFrames = atlas?.idle?.[facing] ?? null;
+  // character visible while still animating in place. Idle also gets the
+  // weapon-family suffix so mobs / weapon swaps keep their right look.
+  const idleSuffixedKey = stateSuffix ? `idle_${stateSuffix}` : null;
+  const fallbackFrames =
+    (idleSuffixedKey ? atlas?.[idleSuffixedKey]?.[facing] : null) ??
+    atlas?.idle?.[facing] ??
+    null;
   const frames = directFrames ?? fallbackFrames ?? null;
   // staticIdle: pretend the idle loop is a single-frame array so the
   // interval below skips it entirely.

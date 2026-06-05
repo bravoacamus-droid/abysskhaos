@@ -762,6 +762,8 @@ export default function PhaserExploration({
             locale={locale}
             session={encounterCutscene.session}
             player={state.player}
+            equipped={state.equipped}
+            itemCatalog={state.item_catalog}
             mobs={encounterCutscene.mobs}
             // Prefer the encounter's cinematic combat backdrop when
             // set on the trigger prop's metadata; fall back to the
