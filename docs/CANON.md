@@ -126,6 +126,60 @@ Las 6 referencias mezclan tonos según el rol del personaje. Para que el arte de
 
 ---
 
+## 9. Sistema elemental — 9 elementos (pivot isekai)
+
+**Conflicto:** Doc 1 §8 documenta **8 elementos** (Fuego, Agua, Tierra, Rayo, Sombra,
+Luz, Viento, Arcano) con matriz 8×8. El pivot isekai (ver
+[`docs/DESTINY_ENGINE.md`](DESTINY_ENGINE.md)) adopta **9 elementos** con tema
+Wu Xing, incluyendo **Metal**.
+
+**Decisión (2026-06-11): 9 elementos canónicos.** Se **retira Arcano** y se
+añaden **Metal** y **Madera**. Renombres canónicos: **Aire** ≡ Viento ·
+**Trueno** ≡ Rayo · **Oscuridad** ≡ Sombra (el texto de habilidades de los docs
+originales que diga Viento/Rayo/Sombra se mapea a estos). El nicho de Arcano
+("ignora 30% DEF") lo hereda **Metal**.
+
+### Los 9 elementos
+🔩 Metal · 🌳 Madera · 💧 Agua · 🔥 Fuego · ⛰️ Tierra · 🌬️ Aire · ⚡ Trueno · ☀️ Luz · 🌑 Oscuridad
+
+**Ids canónicos (inglés, convención del repo `elements.id`):** `metal` · `wood` ·
+`water` · `fire` · `earth` · `wind` (Aire) · `lightning` (Trueno) · `light` (Luz) ·
+`shadow` (Oscuridad). Los renames (Viento→Aire, Rayo→Trueno, Sombra→Oscuridad) son
+**solo display**: el id no cambia. `metal`/`wood` se agregan; `arcane` se retira del seed.
+
+La **rareza de asignación** (Destiny Engine) vive en `docs/DESTINY_ENGINE.md` §7:
+Metal 2% · Oscuridad 5% · Luz 8% · resto 14.17%.
+
+### Matriz de ventajas — dos ciclos + especial
+Multiplicadores: **1.5×** ventaja · **0.6×** resistencia · **2.0×** solo
+Luz→Oscuridad (único superefectivo, preserva canon). Inter-familia
+(natural ↔ místico) = **1.0× neutral**, salvo el especial.
+
+- **Ciclo natural (Wu Xing 克):** Madera ▸ Tierra ▸ Agua ▸ Fuego ▸ Metal ▸ (Madera…)
+- **Ciclo místico (4):** Aire ▸ Trueno ▸ Oscuridad ▸ Luz ▸ (Aire…)
+- **Especial:** ☀️ Luz ×2.0 vs 🌑 Oscuridad.
+
+| Elemento | Fuerte vs (1.5×) | Débil vs (recibe 1.5×) | Mecánica especial |
+|---|---|---|---|
+| 🌳 Madera | Tierra | Metal | Enraíza: +regen HP/turno |
+| ⛰️ Tierra | Agua | Madera | +30% DEF en rooms de tierra |
+| 💧 Agua | Fuego | Tierra | Mojado: −30% resist. Trueno |
+| 🔥 Fuego | Metal | Agua | Quemadura (estado `BURN`, §7) |
+| 🔩 Metal | Madera | Fuego | Perfora: ignora 30% DEF |
+| 🌬️ Aire | Trueno | Luz | Empuja al objetivo 1 room |
+| ⚡ Trueno | Oscuridad | Aire | Encadena a 2 enemigos al 50% |
+| 🌑 Oscuridad | Luz (1.5×) | Trueno · **Luz (×2.0)** | Roba 10% HP/turno |
+| ☀️ Luz | Aire · **Oscuridad (×2.0)** | Oscuridad (1.5×) | ×2 vs Oscuridad |
+
+Luz y Oscuridad quedan en **rivalidad mutua**: Luz pega 2.0× a Oscuridad (su
+contra-firma), pero Oscuridad aún amenaza a Luz 1.5× con su drenaje.
+
+**Pendiente de implementación:** tabla `elements` (catálogo i18n) + columna
+`characters.element_id` + la matriz como dato server-side para el resolver de
+combate. La afinidad da +25% daño / −25% recibido del mismo elemento (Doc 1, Nv 1).
+
+---
+
 ## Política de cambio
 
 - Cambios a este documento se hacen **solo** vía PR con justificación.

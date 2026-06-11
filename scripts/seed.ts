@@ -20,6 +20,8 @@ import { seedNpcs } from "../data/seeds/npcs";
 import { seedBestiary } from "../data/seeds/bestiary";
 import { seedItems } from "../data/seeds/items";
 import { seedPhase3Tutorial } from "../data/seeds/phase3_tutorial";
+import { seedCompanions } from "../data/seeds/companions";
+import { seedPassives } from "../data/seeds/passives";
 import type { SeedReport } from "../data/seeds/_types";
 
 loadEnv({ path: ".env.local" });
@@ -48,6 +50,8 @@ const stages: Stage[] = [
   { name: "bestiary",   run: () => seedBestiary(client) },
   { name: "items",      run: () => seedItems(client) },
   { name: "phase3_tutorial", run: () => seedPhase3Tutorial(client) },
+  { name: "companions", run: () => seedCompanions(client) },
+  { name: "passives",   run: () => seedPassives(client) },
 ];
 
 async function main() {

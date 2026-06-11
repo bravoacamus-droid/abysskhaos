@@ -114,5 +114,116 @@
     "dialogue_next": "Continue",
     "dialogue_close": "End",
     "talk_prompt": "Tap to speak"
+  },
+  "combat": {
+    "encounter_title": "Ambush!",
+    "action_attack": "Attack",
+    "action_skill": "Skill",
+    "action_defend": "Defend",
+    "action_dodge": "Dodge",
+    "pick_target": "Pick target",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "log_skill": "{actor} uses Heavy Strike on {target} — {dmg} dmg",
+    "log_miss": "{actor} attacks {target} — miss!",
+    "log_defend": "You brace to defend",
+    "log_dodge_ready": "You ready to dodge",
+    "your_turn": "Your turn",
+    "enemy_turn": "Enemy turn",
+    "resolving": "Resolving…",
+    "actor_you": "You",
+    "log_empty": "Combat begins…",
+    "log_attack": "{actor} hits {target} — {dmg} dmg",
+    "log_death": "{actor} falls",
+    "log_victory": "Victory! +{exp} EXP · +{khryn} Khryn",
+    "log_defeat": "You were defeated…",
+    "victory_title": "Victory",
+    "victory_body": "+{exp} EXP · +{khryn} Khryn",
+    "defeat_title": "Defeat",
+    "defeat_body": "Your soul returns to the Threshold with full health.",
+    "continue": "Continue",
+    "respawn": "Respawn at r01"
+  },
+  "interact": {
+    "open_prompt": "Z to open",
+    "chest_potions_x2": "You found 2 minor health potions! (each heals 50 HP)",
+    "reward_generic": "You found something new."
+  },
+  "tutorial": {
+    "step": {
+      "walk_to_cedric": "Walk up to Cedric",
+      "after_dialogue": "Take the sword Cedric left for you",
+      "pickup_sword": "Step on the sword and press Z",
+      "equip_sword": "Equip the sword in your main hand"
+    },
+    "pickup_prompt": "Z to pick up"
+  },
+  "inventory": {
+    "title": "Inventory",
+    "open_hint": "I",
+    "close": "Close",
+    "tab_inventory": "Bag",
+    "tab_equipped": "Gear",
+    "tab_stats": "Stats",
+    "empty_slot": "Empty",
+    "empty_category": "No items in this category",
+    "equip_action": "Equip",
+    "unequip_action": "Unequip",
+    "no_compatible_items": "You have nothing compatible with this slot",
+    "category": {
+      "all": "All",
+      "weapon": "Weapons",
+      "armor": "Armor",
+      "accessory": "Accessories",
+      "consumable": "Consumables",
+      "gem": "Gems",
+      "quest": "Quest",
+      "misc": "Misc"
+    },
+    "handedness": {
+      "one_handed": "One-handed",
+      "two_handed": "Two-handed",
+      "off_hand": "Off-hand"
+    },
+    "handedness_label": "Grip",
+    "armor_slot_label": "Piece",
+    "durability_label": "Durability",
+    "quantity_label": "Quantity",
+    "equipped_hint": "Tap an equipped slot in the Equipo tab to unequip",
+    "armor_slot": {
+      "head": "Head",
+      "chest": "Chest",
+      "arms": "Arms",
+      "legs": "Legs",
+      "feet": "Feet",
+      "off_hand_shield": "Shield"
+    },
+    "slot": {
+      "main_hand": "Main hand",
+      "off_hand": "Off hand",
+      "armor_head": "Head",
+      "armor_chest": "Chest",
+      "armor_arms": "Arms",
+      "armor_legs": "Legs",
+      "armor_feet": "Feet",
+      "accessory_ring_1": "Ring 1",
+      "accessory_ring_2": "Ring 2",
+      "accessory_amulet": "Amulet"
+    }
+  },
+  "stats": {
+    "hp": "HP",
+    "mp": "MP",
+    "atk": "ATK",
+    "def": "DEF",
+    "level": "Level",
+    "exp": "Experience",
+    "class": "Class",
+    "path": "Path",
+    "title": "Title",
+    "section_combat": "Combat",
+    "section_attrs": "Primary attributes",
+    "section_progress": "Progression",
+    "subattr_pending_hint": "Balance coefficient not set yet."
   }
 }

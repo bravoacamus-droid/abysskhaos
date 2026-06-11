@@ -6,15 +6,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { upsertWithI18n, type RecordTranslations, type SeedReport } from "./_types";
 
+// 9 canonical elements (docs/CANON.md §9, isekai pivot). Wu Xing 5 + mystic 4.
+// English ids are stable; the Spanish renames (Aire/Trueno/Oscuridad) are
+// display only. `arcane` is kept as a retired legacy row (not rolled by the
+// Destiny Engine; may still tag legacy monster data) — never delete, FK-safe.
 const elements = [
-  { id: "fire",    name: "Fire",    description: "Flames; strong vs Earth, weak vs Water.",            color_hex: "#E64A19", sort_order: 1, i18n: { es: { name: "Fuego",   description: "Llamas; fuerte vs Tierra, débil vs Agua." } } },
-  { id: "water",   name: "Water",   description: "Cold and tides; strong vs Fire/Lightning, weak vs Earth.", color_hex: "#1E88E5", sort_order: 2, i18n: { es: { name: "Agua",    description: "Frío y mareas; fuerte vs Fuego/Rayo, débil vs Tierra." } } },
-  { id: "earth",   name: "Earth",   description: "Stone and verdant life; strong vs Lightning/Water, weak vs Wind.", color_hex: "#6D4C41", sort_order: 3, i18n: { es: { name: "Tierra",  description: "Roca y vida vegetal; fuerte vs Rayo/Agua, débil vs Viento." } } },
-  { id: "lightning", name: "Lightning", description: "Electricity; strong vs Water/Wind, weak vs Earth.",  color_hex: "#FBC02D", sort_order: 4, i18n: { es: { name: "Rayo",    description: "Electricidad; fuerte vs Agua/Viento, débil vs Tierra." } } },
-  { id: "wind",    name: "Wind",    description: "Moving air; strong vs Fire/Arcane, weak vs Earth/Lightning.", color_hex: "#B0BEC5", sort_order: 5, i18n: { es: { name: "Viento",  description: "Aire en movimiento; fuerte vs Fuego/Arcano, débil vs Tierra/Rayo." } } },
-  { id: "arcane",  name: "Arcane",  description: "Raw magic; strong vs Shadow, weak vs Light.",          color_hex: "#8E24AA", sort_order: 6, i18n: { es: { name: "Arcano",  description: "Magia bruta; fuerte vs Sombra, débil vs Luz." } } },
-  { id: "shadow",  name: "Shadow",  description: "Darkness; strong vs Light, ×2 weak vs Light (only super-effective).", color_hex: "#263238", sort_order: 7, i18n: { es: { name: "Sombra",  description: "Oscuridad; fuerte vs Luz, ×2 débil vs Luz (único superefectivo)." } } },
-  { id: "light",   name: "Light",   description: "Sacred; ×2 vs Shadow, weak vs Arcane.",                color_hex: "#FFEE58", sort_order: 8, i18n: { es: { name: "Luz",     description: "Sagrado; ×2 vs Sombra, débil vs Arcano." } } },
+  { id: "metal",   name: "Metal",   description: "Forged metal; strong vs Wood, weak vs Fire. Pierces 30% DEF.", color_hex: "#9E9E9E", sort_order: 1, i18n: { es: { name: "Metal",   description: "Metal forjado; fuerte vs Madera, débil vs Fuego. Perfora 30% DEF." } } },
+  { id: "wood",    name: "Wood",    description: "Living wood; strong vs Earth, weak vs Metal. Roots: HP regen.", color_hex: "#2E7D32", sort_order: 2, i18n: { es: { name: "Madera",  description: "Madera viva; fuerte vs Tierra, débil vs Metal. Enraíza: regen HP." } } },
+  { id: "water",   name: "Water",   description: "Cold and tides; strong vs Fire, weak vs Earth. Inflicts Wet.", color_hex: "#1E88E5", sort_order: 3, i18n: { es: { name: "Agua",    description: "Frío y mareas; fuerte vs Fuego, débil vs Tierra. Inflige Mojado." } } },
+  { id: "fire",    name: "Fire",    description: "Flames; strong vs Metal, weak vs Water. Inflicts Burn.",       color_hex: "#E64A19", sort_order: 4, i18n: { es: { name: "Fuego",   description: "Llamas; fuerte vs Metal, débil vs Agua. Inflige Quemadura." } } },
+  { id: "earth",   name: "Earth",   description: "Stone; strong vs Water, weak vs Wood. +DEF on earthen rooms.", color_hex: "#6D4C41", sort_order: 5, i18n: { es: { name: "Tierra",  description: "Roca; fuerte vs Agua, débil vs Madera. +DEF en rooms de tierra." } } },
+  { id: "wind",    name: "Wind",    description: "Moving air; strong vs Lightning, weak vs Light. Pushes the target.", color_hex: "#B0BEC5", sort_order: 6, i18n: { es: { name: "Aire",    description: "Aire en movimiento; fuerte vs Trueno, débil vs Luz. Empuja al objetivo." } } },
+  { id: "lightning", name: "Lightning", description: "Electricity; strong vs Shadow, weak vs Wind. Chains to 2 foes.", color_hex: "#FBC02D", sort_order: 7, i18n: { es: { name: "Trueno",  description: "Electricidad; fuerte vs Oscuridad, débil vs Aire. Encadena a 2." } } },
+  { id: "light",   name: "Light",   description: "Sacred; strong vs Wind, ×2 vs Shadow. Only super-effective.",  color_hex: "#FFEE58", sort_order: 8, i18n: { es: { name: "Luz",     description: "Sagrado; fuerte vs Aire, ×2 vs Oscuridad. Único superefectivo." } } },
+  { id: "shadow",  name: "Shadow",  description: "Darkness; strong vs Light, weak vs Lightning (and ×2 from Light). Drains HP.", color_hex: "#263238", sort_order: 9, i18n: { es: { name: "Oscuridad", description: "Oscuridad; fuerte vs Luz, débil vs Trueno (y ×2 de Luz). Roba HP." } } },
+  { id: "arcane",  name: "Arcane",  description: "Raw magic (legacy — retired from the destiny roll, see CANON §9).", color_hex: "#8E24AA", sort_order: 10, i18n: { es: { name: "Arcano",  description: "Magia bruta (legado — retirado de la tirada de destino, ver CANON §9)." } } },
 ] as const;
 
 const statusEffects = [

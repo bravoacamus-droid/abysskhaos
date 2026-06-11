@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { runDestiny, secureSeed, mulberry32 } from "@/lib/server/destiny";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,16 +11,26 @@ export const dynamic = "force-dynamic";
  * GET /api/v1/characters → list the authenticated user's active characters,
  * ordered by slot.
  *
- * POST /api/v1/characters → create a new character in the lowest empty slot
- * (or the requested slot if it's free and the user has access to it).
+ * POST /api/v1/characters → create a character from the 3-question destiny quiz
+ * (docs/DESTINY_ENGINE.md). The client sends only its answers; the server rolls
+ * class / element / companion / weapon / attributes / passive with its own seed
+ * and persists the result. SECURITY: the roll is server-authoritative — the
+ * client never picks the class or supplies the seed
+ * (feedback_security_server_authoritative).
  *
- * The 4-slot ceiling is enforced by a Postgres trigger
- * (`enforce_character_slot_limit`); slots 3 and 4 require USDT in Phase 12,
- * so server-side we cap at slots 1–2 for now.
+ * The 3-slot ceiling is enforced by a Postgres trigger
+ * (`enforce_character_slot_limit`). Isekai entitlement: free tier = slot 1;
+ * slots 2 and 3 require USDT in Phase 12, so server-side we allow only slot 1
+ * for now.
  */
 
 const NAME_PATTERN = /^[\p{L}\p{N} _.\-']{1,24}$/u;
-const ALLOWED_FREE_SLOTS = [1, 2];
+const ALLOWED_FREE_SLOTS = [1];
+
+const CHARACTER_COLUMNS =
+  "id, slot_index, name, class_id, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, " +
+  "attr_strength, attr_agility, attr_intelligence, attr_spirit, " +
+  "element_id, companion_id, passive_id, passive_rank, weapon_loadout_id, current_floor, created_at";
 
 export async function GET(req: Request) {
   const session = await resolveSession(req);
@@ -28,9 +39,7 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("characters")
-    .select(
-      "id, slot_index, name, class_id, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, current_floor, created_at",
-    )
+    .select(CHARACTER_COLUMNS)
     .eq("user_id", session.user.id)
     .eq("is_active", true)
     .order("slot_index", { ascending: true });
@@ -43,9 +52,13 @@ export async function GET(req: Request) {
 
 type CreateBody = {
   name?: unknown;
-  class_id?: unknown;
+  birth_date?: unknown;
+  occupation_id?: unknown;
+  hobby_id?: unknown;
   slot_index?: unknown;
 };
+
+const isNonEmptyString = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
 export async function POST(req: Request) {
   const session = await resolveSession(req);
@@ -64,26 +77,46 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (typeof body.class_id !== "string" || body.class_id.length === 0) {
-    return NextResponse.json({ error: "INVALID_CLASS" }, { status: 400 });
+  if (!isNonEmptyString(body.birth_date) || !isNonEmptyString(body.occupation_id) || !isNonEmptyString(body.hobby_id)) {
+    return NextResponse.json(
+      { error: "INVALID_ANSWERS", detail: "birth_date, occupation_id and hobby_id are required" },
+      { status: 400 },
+    );
+  }
+
+  // --- Destiny roll (server-authoritative, server seed) ----------------------
+  const seed = secureSeed();
+  let destiny;
+  try {
+    destiny = runDestiny(
+      { birthDate: body.birth_date, occupationId: body.occupation_id, hobbyId: body.hobby_id },
+      new Date(),
+      mulberry32(seed),
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "DESTINY_FAILED";
+    if (msg === "UNDERAGE") return NextResponse.json({ error: "UNDERAGE", detail: "13+ only" }, { status: 422 });
+    if (msg.startsWith("INVALID_")) return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json({ error: "DESTINY_FAILED", detail: msg }, { status: 500 });
   }
 
   const supabase = getSupabaseAdmin();
 
+  // Base vitals come from the rolled class (attrs come from the roll).
   const { data: cls, error: classErr } = await supabase
     .from("classes")
-    .select("id, starting_hp, starting_mp, starting_atk, starting_def, primary_attr_a_id, primary_attr_b_id")
-    .eq("id", body.class_id)
+    .select("id, starting_hp, starting_mp, starting_atk, starting_def")
+    .eq("id", destiny.classId)
     .maybeSingle();
   if (classErr) {
     return NextResponse.json({ error: "CLASS_LOOKUP_FAILED", detail: classErr.message }, { status: 500 });
   }
   if (!cls) {
-    return NextResponse.json({ error: "CLASS_NOT_FOUND" }, { status: 400 });
+    // The roll produced a class that isn't seeded — server/data bug, not user input.
+    return NextResponse.json({ error: "ROLLED_CLASS_MISSING", detail: destiny.classId }, { status: 500 });
   }
 
-  // Slot allocation: pick the lowest free slot in [1, 2]. Phase 12 will allow
-  // slots 3-4 once the player has paid USDT.
+  // --- Slot allocation: free tier only gets slot 1 ---------------------------
   const { data: existing, error: existingErr } = await supabase
     .from("characters")
     .select("slot_index")
@@ -115,45 +148,38 @@ export async function POST(req: Request) {
     }
   }
 
-  // Lv 1 attribute scores: each primary attr starts at 5, the class' two
-  // affinity attributes get +2 each. Sub-attributes start unallocated.
-  const baseAttrs = { attr_strength: 5, attr_agility: 5, attr_intelligence: 5, attr_spirit: 5 };
-  const attrColumn = (id: string) =>
-    id === "strength"
-      ? "attr_strength"
-      : id === "agility"
-        ? "attr_agility"
-        : id === "intelligence"
-          ? "attr_intelligence"
-          : "attr_spirit";
-  const colA = attrColumn(cls.primary_attr_a_id);
-  const colB = attrColumn(cls.primary_attr_b_id);
-  const attrs: Record<string, number> = { ...baseAttrs };
-  attrs[colA] = (attrs[colA] ?? 5) + 2;
-  attrs[colB] = (attrs[colB] ?? 5) + 2;
-
   const { data: created, error: insertErr } = await supabase
     .from("characters")
     .insert({
       user_id: session.user.id,
       slot_index: slot,
       name: body.name,
-      class_id: body.class_id,
+      class_id: destiny.classId,
       hp_current: cls.starting_hp,
       hp_max: cls.starting_hp,
       mp_current: cls.starting_mp,
       mp_max: cls.starting_mp,
       atk: cls.starting_atk,
       def: cls.starting_def,
-      attr_strength: attrs.attr_strength,
-      attr_agility: attrs.attr_agility,
-      attr_intelligence: attrs.attr_intelligence,
-      attr_spirit: attrs.attr_spirit,
+      attr_strength: destiny.attributes.attr_strength,
+      attr_agility: destiny.attributes.attr_agility,
+      attr_intelligence: destiny.attributes.attr_intelligence,
+      attr_spirit: destiny.attributes.attr_spirit,
+      element_id: destiny.elementId,
+      companion_id: destiny.companionId,
+      passive_id: destiny.passiveId,
+      passive_rank: destiny.passiveRank,
+      weapon_loadout_id: destiny.weaponLoadoutId,
+      destiny_meta: {
+        occupation_id: body.occupation_id,
+        hobby_id: body.hobby_id,
+        zodiac_id: destiny.meta.zodiacId,
+        age_band_id: destiny.meta.ageBandId,
+        seed,
+      },
       current_floor: 100,
     })
-    .select(
-      "id, slot_index, name, class_id, level, exp, hp_current, hp_max, mp_current, mp_max, atk, def, attr_strength, attr_agility, attr_intelligence, attr_spirit, current_floor, created_at",
-    )
+    .select(CHARACTER_COLUMNS)
     .single();
 
   if (insertErr) {
