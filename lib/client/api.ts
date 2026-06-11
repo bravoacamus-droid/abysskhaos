@@ -85,9 +85,29 @@ export type CharacterRow = {
   attr_agility: number;
   attr_intelligence: number;
   attr_spirit: number;
+  element_id: string | null;
+  companion_id: string | null;
+  passive_id: string | null;
+  passive_rank: number;
+  weapon_loadout_id: string | null;
   current_floor: number | null;
   created_at: string;
 };
+
+/** Localized summary of a freshly-rolled destiny, returned by createCharacter. */
+export type DestinyReveal = {
+  class_name: string;
+  element_name: string;
+  companion_name: string;
+  passive_name: string;
+  passive_value: number;
+  passive_sign: "+" | "-";
+  weapon_loadout_id: string;
+  zodiac_id: string;
+  age_band_id: string;
+};
+
+export type CreatedCharacter = CharacterRow & { destiny: DestinyReveal };
 
 export async function fetchClasses(opts: FetchOpts & { locale: string }): Promise<ClassRow[]> {
   // /api/v1/classes is a public endpoint but we still pass initData so the
@@ -107,11 +127,25 @@ export function fetchCharacters(opts: FetchOpts): Promise<CharacterRow[]> {
 }
 
 export function createCharacter(
-  opts: FetchOpts & { name: string; classId: string; slotIndex?: number },
-): Promise<CharacterRow> {
+  opts: FetchOpts & {
+    name: string;
+    birthDate: string;
+    occupationId: string;
+    hobbyId: string;
+    locale: string;
+    slotIndex?: number;
+  },
+): Promise<CreatedCharacter> {
   return call("/api/v1/characters", "POST", {
     initData: opts.initData,
-    body: { name: opts.name, class_id: opts.classId, slot_index: opts.slotIndex },
+    body: {
+      name: opts.name,
+      birth_date: opts.birthDate,
+      occupation_id: opts.occupationId,
+      hobby_id: opts.hobbyId,
+      locale: opts.locale,
+      slot_index: opts.slotIndex,
+    },
     signal: opts.signal,
   });
 }

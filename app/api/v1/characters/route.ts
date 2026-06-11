@@ -55,10 +55,79 @@ type CreateBody = {
   birth_date?: unknown;
   occupation_id?: unknown;
   hobby_id?: unknown;
+  locale?: unknown;
   slot_index?: unknown;
 };
 
 const isNonEmptyString = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+
+type RolledIds = {
+  classId: string;
+  elementId: string;
+  companionId: string;
+  passiveId: string;
+  weaponLoadoutId: string;
+  meta: { zodiacId: string; ageBandId: string };
+};
+
+/**
+ * Localized "destiny reveal" for the creation response — catalog display names
+ * for the rolled class / element / companion / passive (same localization
+ * pattern as /api/v1/classes). One-time per creation, not a hot path.
+ */
+async function buildDestinyReveal(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  locale: string,
+  d: RolledIds,
+) {
+  const [classRes, elemRes, compRes, passRes] = await Promise.all([
+    supabase.from("classes").select("name").eq("id", d.classId).maybeSingle(),
+    supabase.from("elements").select("name").eq("id", d.elementId).maybeSingle(),
+    supabase.from("companions").select("name").eq("id", d.companionId).maybeSingle(),
+    supabase.from("passives").select("name, value_r1, sign").eq("id", d.passiveId).maybeSingle(),
+  ]);
+  const names = {
+    class: (classRes.data?.name as string | undefined) ?? d.classId,
+    element: (elemRes.data?.name as string | undefined) ?? d.elementId,
+    companion: (compRes.data?.name as string | undefined) ?? d.companionId,
+    passive: (passRes.data?.name as string | undefined) ?? d.passiveId,
+  };
+  if (locale !== "en") {
+    const want: Array<[keyof typeof names, string, string]> = [
+      ["class", "class", d.classId],
+      ["element", "element", d.elementId],
+      ["companion", "companion", d.companionId],
+      ["passive", "passive", d.passiveId],
+    ];
+    const trs = await Promise.all(
+      want.map(([, type, id]) =>
+        supabase
+          .from("translations")
+          .select("value")
+          .eq("entity_type", type)
+          .eq("entity_id", id)
+          .eq("locale", locale)
+          .eq("field", "name")
+          .maybeSingle(),
+      ),
+    );
+    trs.forEach((tr, i) => {
+      const v = tr.data?.value as string | undefined;
+      if (v) names[want[i]![0]] = v;
+    });
+  }
+  return {
+    class_name: names.class,
+    element_name: names.element,
+    companion_name: names.companion,
+    passive_name: names.passive,
+    passive_value: Number((passRes.data?.value_r1 as number | undefined) ?? 0),
+    passive_sign: ((passRes.data?.sign as string | undefined) ?? "+") as "+" | "-",
+    weapon_loadout_id: d.weaponLoadoutId,
+    zodiac_id: d.meta.zodiacId,
+    age_band_id: d.meta.ageBandId,
+  };
+}
 
 export async function POST(req: Request) {
   const session = await resolveSession(req);
@@ -192,5 +261,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INSERT_FAILED", detail: insertErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  const locale = typeof body.locale === "string" ? body.locale : "en";
+  const reveal = await buildDestinyReveal(supabase, locale, {
+    classId: destiny.classId,
+    elementId: destiny.elementId,
+    companionId: destiny.companionId,
+    passiveId: destiny.passiveId,
+    weaponLoadoutId: destiny.weaponLoadoutId,
+    meta: destiny.meta,
+  });
+
+  return NextResponse.json(
+    { data: { ...(created as unknown as Record<string, unknown>), destiny: reveal } },
+    { status: 201 },
+  );
 }
