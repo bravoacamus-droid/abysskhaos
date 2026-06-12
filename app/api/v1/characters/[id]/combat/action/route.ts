@@ -90,6 +90,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     player_max_hp: row.player_max_hp as number,
     player_atk: row.player_atk as number,
     player_def: row.player_def as number,
+    player_element: (row.player_element as string | null) ?? null,
     mobs: row.mobs as CombatSessionState["mobs"],
     turn_order: row.turn_order as CombatSessionState["turn_order"],
     turn_idx: row.turn_idx as number,

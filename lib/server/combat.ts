@@ -19,6 +19,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { elementalDamageFactor } from "./element-matrix";
+
 export type CombatMob = {
   id: string;
   name: string;
@@ -27,6 +29,8 @@ export type CombatMob = {
   atk: number;
   def: number;
   exp: number;
+  /** Canonical `elements.id` (or null/legacy). Drives the advantage matrix. */
+  element: string | null;
   alive: boolean;
   /** Server-resolved sprite atlas so the React overlay can render
    *  the mob in side-view without round-tripping to /monsters. */
@@ -51,7 +55,7 @@ export type CombatTurn =
 export type PlayerActionKind = "attack" | "skill" | "defend" | "dodge";
 
 export type CombatLogEntry =
-  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number; action_kind?: "attack" | "skill" }
+  | { turn: number; kind: "attack"; actor: "player" | string; target: "player" | string; dmg: number; target_hp_after: number; action_kind?: "attack" | "skill"; element_factor?: number }
   | { turn: number; kind: "miss"; actor: string; target: "player" | string; reason: "dodged" }
   | { turn: number; kind: "stance"; actor: "player"; mode: "defending" | "dodging" }
   | { turn: number; kind: "death"; actor: string }
@@ -65,6 +69,8 @@ export type CombatSessionState = {
   player_max_hp: number;
   player_atk: number;
   player_def: number;
+  /** The character's elemental affinity (`elements.id`) or null. */
+  player_element: string | null;
   mobs: CombatMob[];
   turn_order: CombatTurn[];
   turn_idx: number;
@@ -76,8 +82,8 @@ export type CombatSessionState = {
 /** Build the initial session row from the character + bestiary data. */
 export function buildInitialCombatSession(args: {
   encounterId: string;
-  player: { hp_current: number; hp_max: number; atk: number; def: number };
-  mobs: Array<{ id: string; name: string; hp_max: number; atk: number; def: number; exp: number; sprite_atlas: Record<string, string> | null; animation_atlas: Record<string, Record<string, string[]>> | null; combat_sprite_atlas: Record<string, string> | null; combat_animation_atlas: Record<string, Record<string, string[]>> | null }>;
+  player: { hp_current: number; hp_max: number; atk: number; def: number; element_id: string | null };
+  mobs: Array<{ id: string; name: string; hp_max: number; atk: number; def: number; exp: number; primary_element_id: string | null; sprite_atlas: Record<string, string> | null; animation_atlas: Record<string, Record<string, string[]>> | null; combat_sprite_atlas: Record<string, string> | null; combat_animation_atlas: Record<string, Record<string, string[]>> | null }>;
 }): Omit<CombatSessionState, "id"> {
   // Turn order: player goes first, then mobs in declared order. Phase
   // 4c will sort by AGI / initiative; for now first-attempt-friendly
@@ -92,6 +98,7 @@ export function buildInitialCombatSession(args: {
     player_max_hp: args.player.hp_max,
     player_atk: args.player.atk,
     player_def: args.player.def,
+    player_element: args.player.element_id,
     mobs: args.mobs.map((m) => ({
       id: m.id,
       name: m.name,
@@ -100,6 +107,7 @@ export function buildInitialCombatSession(args: {
       atk: m.atk,
       def: m.def,
       exp: m.exp,
+      element: m.primary_element_id,
       alive: true,
       sprite_atlas: m.sprite_atlas,
       animation_atlas: m.animation_atlas,
@@ -159,11 +167,17 @@ function runMobCounterAttacks(
       next.turn_idx += 1;
       continue;
     }
-    // Compute damage; defending halves it.
+    // Compute damage; element matrix + affinity, then defending halves it.
     const rawDmg = computeDamage(attacker.atk, next.player_def);
+    const factor = elementalDamageFactor({
+      attackElement: attacker.element,
+      defenderElement: next.player_element,
+      defenderAffinity: next.player_element,
+    });
+    const elemDmg = Math.max(1, Math.floor(rawDmg * factor));
     const mobDmg = stance === "defending"
-      ? Math.max(1, Math.floor(rawDmg * DEFEND_DAMAGE_FACTOR))
-      : rawDmg;
+      ? Math.max(1, Math.floor(elemDmg * DEFEND_DAMAGE_FACTOR))
+      : elemDmg;
     next.player_hp = Math.max(0, next.player_hp - mobDmg);
     appended.push({
       turn: next.turn_idx,
@@ -172,6 +186,7 @@ function runMobCounterAttacks(
       target: "player",
       dmg: mobDmg,
       target_hp_after: next.player_hp,
+      element_factor: factor,
     });
     if (next.player_hp === 0) {
       appended.push({ turn: next.turn_idx, kind: "defeat" });
@@ -225,9 +240,13 @@ export function applyPlayerAction(
     if (!targetMob || !targetMob.alive) throw new Error("INVALID_TARGET");
 
     const baseDmg = computeDamage(next.player_atk, targetMob.def);
-    const dmg = args.action === "skill"
-      ? Math.max(1, Math.floor(baseDmg * SKILL_DAMAGE_MULTIPLIER))
-      : baseDmg;
+    const skilled = args.action === "skill" ? baseDmg * SKILL_DAMAGE_MULTIPLIER : baseDmg;
+    const factor = elementalDamageFactor({
+      attackElement: next.player_element,
+      defenderElement: targetMob.element,
+      attackerAffinity: next.player_element,
+    });
+    const dmg = Math.max(1, Math.floor(skilled * factor));
     const newHp = Math.max(0, targetMob.hp - dmg);
     targetMob.hp = newHp;
     appended.push({
@@ -238,6 +257,7 @@ export function applyPlayerAction(
       dmg,
       target_hp_after: newHp,
       action_kind: args.action,
+      element_factor: factor,
     });
     if (newHp === 0) {
       targetMob.alive = false;

@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: character, error: charErr } = await supabase
     .from("characters")
-    .select("id, user_id, current_room_id, seen_encounters, hp_current, hp_max, atk, def")
+    .select("id, user_id, current_room_id, seen_encounters, hp_current, hp_max, atk, def, element_id")
     .eq("id", params.id)
     .eq("is_active", true)
     .maybeSingle();
@@ -115,7 +115,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // future combat scene.
   const { data: monsterRows, error: mErr } = await supabase
     .from("monsters")
-    .select("id, name, base_hp, base_atk, base_def, base_exp, sprite_atlas, animation_atlas, combat_sprite_atlas, combat_animation_atlas")
+    .select("id, name, base_hp, base_atk, base_def, base_exp, primary_element_id, sprite_atlas, animation_atlas, combat_sprite_atlas, combat_animation_atlas")
     .in("id", mobIds);
   if (mErr) return NextResponse.json({ error: "DB_FAILED", detail: mErr.message }, { status: 500 });
 
@@ -146,6 +146,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       atk: m.base_atk as number,
       def: m.base_def as number,
       exp: m.base_exp as number,
+      primary_element_id: (m.primary_element_id as string | null) ?? null,
       sprite_atlas: (m.sprite_atlas as Record<string, string> | null) ?? null,
       animation_atlas:
         (m.animation_atlas as Record<string, Record<string, string[]>> | null) ?? null,
@@ -184,6 +185,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       player_max_hp: existing.player_max_hp as number,
       player_atk: existing.player_atk as number,
       player_def: existing.player_def as number,
+      player_element: (existing.player_element as string | null) ?? null,
       mobs: existing.mobs as CombatSessionState["mobs"],
       turn_order: existing.turn_order as CombatSessionState["turn_order"],
       turn_idx: existing.turn_idx as number,
@@ -199,6 +201,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         hp_max: (character.hp_max as number | null) ?? 1,
         atk: (character.atk as number | null) ?? 1,
         def: (character.def as number | null) ?? 0,
+        element_id: (character.element_id as string | null) ?? null,
       },
       mobs: mobs.map((m) => ({
         id: m.id,
@@ -207,6 +210,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         atk: m.atk,
         def: m.def,
         exp: m.exp,
+        primary_element_id: m.primary_element_id,
         sprite_atlas: m.sprite_atlas,
         animation_atlas: m.animation_atlas,
         combat_sprite_atlas: m.combat_sprite_atlas,
@@ -222,6 +226,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         player_max_hp: initial.player_max_hp,
         player_atk: initial.player_atk,
         player_def: initial.player_def,
+        player_element: initial.player_element,
         mobs: initial.mobs,
         turn_order: initial.turn_order,
         turn_idx: initial.turn_idx,
@@ -241,6 +246,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       player_max_hp: ins.player_max_hp as number,
       player_atk: ins.player_atk as number,
       player_def: ins.player_def as number,
+      player_element: (ins.player_element as string | null) ?? null,
       mobs: ins.mobs as CombatSessionState["mobs"],
       turn_order: ins.turn_order as CombatSessionState["turn_order"],
       turn_idx: ins.turn_idx as number,
