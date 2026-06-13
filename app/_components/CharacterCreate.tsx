@@ -259,6 +259,18 @@ function Reveal({
       </h1>
       <p className="text-3xl font-bold text-white">{character.name}</p>
 
+      {d.element_orb_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={d.element_orb_url}
+          alt={d.element_name}
+          width={112}
+          height={112}
+          className="mx-auto h-28 w-28 object-contain drop-shadow-[0_0_12px_rgba(120,120,255,0.35)]"
+          style={{ imageRendering: "pixelated" }}
+        />
+      ) : null}
+
       <div className="space-y-2 rounded-lg border border-abyss-soul/40 bg-abyss-deep p-5 text-left">
         <RevealRow label={t(locale, "destiny.reveal_class")} value={d.class_name} />
         <RevealRow label={t(locale, "destiny.reveal_element")} value={d.element_name} />

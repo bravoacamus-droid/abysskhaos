@@ -98,6 +98,7 @@ export type CharacterRow = {
 export type DestinyReveal = {
   class_name: string;
   element_name: string;
+  element_orb_url: string | null;
   companion_name: string;
   passive_name: string;
   passive_value: number;
