@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
+  deleteCharacter,
   fetchCharacters,
   fetchClasses,
   updatePreferredLocale,
@@ -23,13 +24,14 @@ const LOCALE_STORAGE_KEY = "abyss.locale";
 type State =
   | { status: "boot" }
   | { status: "rejected"; message: string }
-  | { status: "wizard"; classes: ClassRow[]; characters: CharacterRow[]; activeId: string | null }
+  | { status: "wizard"; classes: ClassRow[]; characters: CharacterRow[]; activeId: string | null; isOwner: boolean }
   | {
       status: "hub";
       classes: ClassRow[];
       characters: CharacterRow[];
       activeId: string;
       mode: "character" | "exploration";
+      isOwner: boolean;
     };
 
 export default function GameShell() {
@@ -88,14 +90,15 @@ export default function GameShell() {
           throw new ApiError(body.error ?? `HTTP_${authRes.status}`, body.detail, authRes.status);
         }
 
-        const [classes, characters] = await Promise.all([
+        const [classes, charList] = await Promise.all([
           fetchClasses({ initData: id, locale: chosenLocale, signal: undefined }),
           fetchCharacters({ initData: id, signal: undefined }),
         ]);
         if (cancelled) return;
+        const { characters, is_owner: isOwner } = charList;
 
         if (characters.length === 0) {
-          setState({ status: "wizard", classes, characters: [], activeId: null });
+          setState({ status: "wizard", classes, characters: [], activeId: null, isOwner });
         } else {
           setState({
             status: "hub",
@@ -103,6 +106,7 @@ export default function GameShell() {
             characters,
             activeId: characters[0]!.id,
             mode: "character",
+            isOwner,
           });
         }
       } catch (err) {
@@ -134,12 +138,30 @@ export default function GameShell() {
       classes: state.classes,
       characters: state.characters,
       activeId: state.activeId,
+      isOwner: state.isOwner,
     });
   }
 
   function handleSelectCharacter(id: string) {
     if (state.status !== "hub") return;
     setState({ ...state, activeId: id, mode: "character" });
+  }
+
+  async function handleDeleteCharacter(id: string) {
+    if (state.status !== "hub" || !state.isOwner || !initData) return;
+    const remaining = state.characters.filter((c) => c.id !== id);
+    // Optimistic removal; on failure we reload on next boot anyway.
+    try {
+      await deleteCharacter({ initData, characterId: id, signal: undefined });
+    } catch {
+      return; // leave UI as-is; the character wasn't removed server-side
+    }
+    if (remaining.length === 0) {
+      setState({ status: "wizard", classes: state.classes, characters: [], activeId: null, isOwner: state.isOwner });
+      return;
+    }
+    const nextActive = state.activeId === id ? remaining[0]!.id : state.activeId;
+    setState({ ...state, characters: remaining, activeId: nextActive });
   }
 
   function handleCreated(character: CharacterRow) {
@@ -151,6 +173,7 @@ export default function GameShell() {
       characters,
       activeId: character.id,
       mode: "character",
+      isOwner: state.isOwner,
     });
   }
 
@@ -205,8 +228,10 @@ export default function GameShell() {
               activeId={state.activeId}
               classMap={klassMap}
               locale={locale}
+              isOwner={state.isOwner}
               onSelect={handleSelectCharacter}
               onForge={handleForgeAnother}
+              onDelete={handleDeleteCharacter}
             />
             <Hub
               character={activeCharacter}
@@ -232,6 +257,7 @@ export default function GameShell() {
                     characters: state.characters,
                     activeId: state.activeId!,
                     mode: "character",
+                    isOwner: state.isOwner,
                   })
               : undefined
           }

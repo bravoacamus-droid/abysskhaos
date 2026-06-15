@@ -37,17 +37,22 @@ export async function GET(req: Request) {
   if (!session.ok) return session.response;
 
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("characters")
-    .select(CHARACTER_COLUMNS)
-    .eq("user_id", session.user.id)
-    .eq("is_active", true)
-    .order("slot_index", { ascending: true });
+  const [charsRes, ownerRes] = await Promise.all([
+    supabase
+      .from("characters")
+      .select(CHARACTER_COLUMNS)
+      .eq("user_id", session.user.id)
+      .eq("is_active", true)
+      .order("slot_index", { ascending: true }),
+    supabase.from("users").select("is_owner").eq("id", session.user.id).maybeSingle(),
+  ]);
 
-  if (error) {
-    return NextResponse.json({ error: "DB_QUERY_FAILED", detail: error.message }, { status: 500 });
+  if (charsRes.error) {
+    return NextResponse.json({ error: "DB_QUERY_FAILED", detail: charsRes.error.message }, { status: 500 });
   }
-  return NextResponse.json({ data });
+  return NextResponse.json({
+    data: { characters: charsRes.data, is_owner: (ownerRes.data?.is_owner as boolean | undefined) ?? false },
+  });
 }
 
 type CreateBody = {
@@ -187,26 +192,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "ROLLED_CLASS_MISSING", detail: destiny.classId }, { status: 500 });
   }
 
-  // --- Slot allocation: free tier only gets slot 1 ---------------------------
-  const { data: existing, error: existingErr } = await supabase
-    .from("characters")
-    .select("slot_index")
-    .eq("user_id", session.user.id)
-    .eq("is_active", true);
+  // --- Slot allocation -------------------------------------------------------
+  // Free tier gets slot 1 only; the owner account bypasses the entitlement
+  // and may hold many characters (slots allocated 1..99). The DB cap trigger
+  // also skips owners (migration 20260615000001).
+  const [{ data: existing, error: existingErr }, { data: ownerRow }] = await Promise.all([
+    supabase.from("characters").select("slot_index").eq("user_id", session.user.id).eq("is_active", true),
+    supabase.from("users").select("is_owner").eq("id", session.user.id).maybeSingle(),
+  ]);
   if (existingErr) {
     return NextResponse.json({ error: "SLOTS_LOOKUP_FAILED", detail: existingErr.message }, { status: 500 });
   }
+  const isOwner = (ownerRow?.is_owner as boolean | undefined) ?? false;
   const usedSlots = new Set((existing ?? []).map((r) => r.slot_index));
   const desiredSlot = typeof body.slot_index === "number" ? body.slot_index : null;
   let slot: number | null = null;
   if (desiredSlot !== null) {
-    if (!ALLOWED_FREE_SLOTS.includes(desiredSlot)) {
+    if (!isOwner && !ALLOWED_FREE_SLOTS.includes(desiredSlot)) {
       return NextResponse.json({ error: "SLOT_NOT_UNLOCKED" }, { status: 402 });
+    }
+    if (isOwner && (desiredSlot < 1 || desiredSlot > 99)) {
+      return NextResponse.json({ error: "INVALID_SLOT" }, { status: 400 });
     }
     if (usedSlots.has(desiredSlot)) {
       return NextResponse.json({ error: "SLOT_OCCUPIED" }, { status: 409 });
     }
     slot = desiredSlot;
+  } else if (isOwner) {
+    // Smallest free positive slot (1..99).
+    for (let candidate = 1; candidate <= 99; candidate++) {
+      if (!usedSlots.has(candidate)) {
+        slot = candidate;
+        break;
+      }
+    }
+    if (slot === null) {
+      return NextResponse.json({ error: "NO_FREE_SLOTS" }, { status: 409 });
+    }
   } else {
     for (const candidate of ALLOWED_FREE_SLOTS) {
       if (!usedSlots.has(candidate)) {

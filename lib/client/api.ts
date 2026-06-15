@@ -125,8 +125,19 @@ export async function fetchClasses(opts: FetchOpts & { locale: string }): Promis
   return ((await res.json()) as { data: ClassRow[] }).data;
 }
 
-export function fetchCharacters(opts: FetchOpts): Promise<CharacterRow[]> {
+/** GET /characters payload: the user's active characters + whether this
+ *  account is the game owner (unlimited characters + delete). */
+export type CharacterList = { characters: CharacterRow[]; is_owner: boolean };
+
+export function fetchCharacters(opts: FetchOpts): Promise<CharacterList> {
   return call("/api/v1/characters", "GET", opts);
+}
+
+/** DELETE /characters/:id — owner-only. Permanently removes a character. */
+export function deleteCharacter(
+  opts: FetchOpts & { characterId: string },
+): Promise<{ deleted: boolean; id: string }> {
+  return call(`/api/v1/characters/${opts.characterId}`, "DELETE", opts);
 }
 
 export function createCharacter(

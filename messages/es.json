@@ -224,7 +224,9 @@
   "slot_picker": {
     "forge": "Forjar",
     "locked_paid": "Se desbloquea con USDT en la Fase 12",
-    "locked_short": "Bloqueado"
+    "locked_short": "Bloqueado",
+    "delete": "Borrar",
+    "delete_confirm": "¿Borrar a {name}? Esta acción es permanente."
   },
   "destiny": {
     "title": "Tu Segunda Oportunidad",

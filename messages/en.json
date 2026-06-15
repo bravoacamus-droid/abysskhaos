@@ -224,7 +224,9 @@
   "slot_picker": {
     "forge": "Forge",
     "locked_paid": "Unlocks with USDT in Phase 12",
-    "locked_short": "Locked"
+    "locked_short": "Locked",
+    "delete": "Delete",
+    "delete_confirm": "Delete {name}? This cannot be undone."
   },
   "destiny": {
     "title": "Your Second Chance",
