@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError, createCharacter, type CreatedCharacter } from "@/lib/client/api";
 import { OCCUPATION_IDS, HOBBY_IDS } from "@/lib/client/destiny-options";
@@ -241,6 +241,47 @@ function OptionGrid({
   );
 }
 
+/**
+ * The element orb: cycles its `element-flicker` atlas frames so the element
+ * "lives" inside a still glass sphere. Falls back to the single static frame
+ * when the atlas isn't populated. Preloads frames to avoid first-loop flicker.
+ */
+function OrbDisplay({
+  atlas,
+  fallback,
+  alt,
+}: {
+  atlas: string[] | null;
+  fallback: string | null;
+  alt: string;
+}) {
+  const frames = atlas && atlas.length > 0 ? atlas : fallback ? [fallback] : [];
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    if (frames.length <= 1) return;
+    frames.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+    const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), 110);
+    return () => clearInterval(id);
+  }, [frames.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (frames.length === 0) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={frames[frame] ?? frames[0]}
+      alt={alt}
+      width={112}
+      height={112}
+      className="mx-auto h-28 w-28 object-contain drop-shadow-[0_0_12px_rgba(120,120,255,0.35)]"
+      style={{ imageRendering: "pixelated" }}
+    />
+  );
+}
+
 function Reveal({
   locale,
   character,
@@ -259,17 +300,7 @@ function Reveal({
       </h1>
       <p className="text-3xl font-bold text-white">{character.name}</p>
 
-      {d.element_orb_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={d.element_orb_url}
-          alt={d.element_name}
-          width={112}
-          height={112}
-          className="mx-auto h-28 w-28 object-contain drop-shadow-[0_0_12px_rgba(120,120,255,0.35)]"
-          style={{ imageRendering: "pixelated" }}
-        />
-      ) : null}
+      <OrbDisplay atlas={d.element_orb_atlas} fallback={d.element_orb_url} alt={d.element_name} />
 
       <div className="space-y-2 rounded-lg border border-abyss-soul/40 bg-abyss-deep p-5 text-left">
         <RevealRow label={t(locale, "destiny.reveal_class")} value={d.class_name} />

@@ -99,6 +99,8 @@ export type DestinyReveal = {
   class_name: string;
   element_name: string;
   element_orb_url: string | null;
+  /** 9 animation frames (PixelLab element-flicker), cycled for the living orb. */
+  element_orb_atlas: string[] | null;
   companion_name: string;
   passive_name: string;
   passive_value: number;

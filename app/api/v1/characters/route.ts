@@ -82,7 +82,7 @@ async function buildDestinyReveal(
 ) {
   const [classRes, elemRes, compRes, passRes] = await Promise.all([
     supabase.from("classes").select("name").eq("id", d.classId).maybeSingle(),
-    supabase.from("elements").select("name, orb_url").eq("id", d.elementId).maybeSingle(),
+    supabase.from("elements").select("name, orb_url, orb_atlas").eq("id", d.elementId).maybeSingle(),
     supabase.from("companions").select("name").eq("id", d.companionId).maybeSingle(),
     supabase.from("passives").select("name, value_r1, sign").eq("id", d.passiveId).maybeSingle(),
   ]);
@@ -120,6 +120,7 @@ async function buildDestinyReveal(
     class_name: names.class,
     element_name: names.element,
     element_orb_url: (elemRes.data?.orb_url as string | null | undefined) ?? null,
+    element_orb_atlas: (elemRes.data?.orb_atlas as string[] | null | undefined) ?? null,
     companion_name: names.companion,
     passive_name: names.passive,
     passive_value: Number((passRes.data?.value_r1 as number | undefined) ?? 0),
