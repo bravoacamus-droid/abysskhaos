@@ -15,6 +15,7 @@ import {
   unequipItem,
   type CombatLogEntry,
   type CombatSession,
+  type ElementOrb,
   type PlayerActionKind,
   type Direction,
   type EquippedSlot,
@@ -73,7 +74,7 @@ export default function PhaserExploration({
   /** Phase 4a: when an encounter trigger fires we run a quick cutscene
    *  (enemies walk in) then show the placeholder pre-combat modal
    *  until the real combat scene ships. `null` = no cutscene running. */
-  const [encounterCutscene, setEncounterCutscene] = useState<{ encounterId: string; mobs: EncounterMob[]; session: CombatSession; backdropUrl: string | null } | null>(null);
+  const [encounterCutscene, setEncounterCutscene] = useState<{ encounterId: string; mobs: EncounterMob[]; session: CombatSession; backdropUrl: string | null; elements: Record<string, ElementOrb> } | null>(null);
   /** True once the cutscene walk-in finishes and we're showing the
    *  combat overlay (Phase 4b — was a placeholder modal in 4a). */
   const [showCombat, setShowCombat] = useState(false);
@@ -367,7 +368,7 @@ export default function PhaserExploration({
       });
       stateRef.current = resp.room_state;
       setState(resp.room_state);
-      setEncounterCutscene({ encounterId, mobs: resp.mobs, session: resp.combat_session, backdropUrl: resp.combat_backdrop_url });
+      setEncounterCutscene({ encounterId, mobs: resp.mobs, session: resp.combat_session, backdropUrl: resp.combat_backdrop_url, elements: resp.elements });
 
       // Drive the cutscene: enemies emerge from the room's south
       // door tile (player came from the north), walk north to one
@@ -765,6 +766,7 @@ export default function PhaserExploration({
             equipped={state.equipped}
             itemCatalog={state.item_catalog}
             mobs={encounterCutscene.mobs}
+            elements={encounterCutscene.elements}
             // Prefer the encounter's cinematic combat backdrop when
             // set on the trigger prop's metadata; fall back to the
             // room's biome wall tile (less atmospheric but always

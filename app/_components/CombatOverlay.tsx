@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { t, type Locale } from "@/lib/i18n";
+import { elementMultiplier } from "@/lib/server/element-matrix";
 import type {
   CharacterItem,
   CombatLogEntry,
   CombatSession,
   CombatTurn,
+  ElementOrb,
   EncounterMob,
   ItemCatalogEntry,
   PlayerActionKind,
@@ -99,6 +101,8 @@ type Props = {
   equipped: CharacterItem[];
   itemCatalog: Record<string, ItemCatalogEntry>;
   mobs: EncounterMob[];
+  /** Orb art per element id (player + mobs) for the affinity HUD. */
+  elements: Record<string, ElementOrb>;
   backdropUrl: string | null;
   onAction: (
     action: PlayerActionKind,
@@ -147,6 +151,7 @@ export function CombatOverlay({
   equipped,
   itemCatalog,
   mobs,
+  elements,
   backdropUrl,
   onAction,
   onClose,
@@ -452,6 +457,8 @@ export function CombatOverlay({
             <EnemyCluster
               mobs={session.mobs}
               encounterMobs={mobs}
+              elements={elements}
+              playerElement={session.player_element}
               animStates={animStates}
               hitFlash={hitFlash}
               floats={floats}
@@ -658,26 +665,40 @@ export function CombatOverlay({
 
         <FFVIBox>
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between">
-              <span
-                className="truncate text-[14px] font-bold uppercase tracking-widest text-white"
-                style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
-              >
-                {player.name}
-              </span>
-              <span
-                className="text-[11px] uppercase tracking-widest text-amber-200"
-                style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
-              >
-                Nv.{player.level}
-              </span>
+            <div className="flex items-center gap-2">
+              {session.player_element ? (
+                <ElementOrbView
+                  orb={elements[session.player_element] ?? null}
+                  size={34}
+                  animate
+                />
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between">
+                  <span
+                    className="truncate text-[14px] font-bold uppercase tracking-widest text-white"
+                    style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+                  >
+                    {player.name}
+                  </span>
+                  <span
+                    className="text-[11px] uppercase tracking-widest text-amber-200"
+                    style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+                  >
+                    Nv.{player.level}
+                  </span>
+                </div>
+                <p
+                  className="text-[10px] uppercase tracking-widest text-sky-200"
+                  style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
+                >
+                  {player.class_name}
+                  {session.player_element && elements[session.player_element]
+                    ? ` · ${elements[session.player_element]!.name}`
+                    : ""}
+                </p>
+              </div>
             </div>
-            <p
-              className="-mt-1 text-[10px] uppercase tracking-widest text-sky-200"
-              style={{ textShadow: "1px 1px 0 rgba(0,0,0,0.7)" }}
-            >
-              {player.class_name}
-            </p>
             <StatBar
               label="PV"
               tone="hp"
@@ -736,6 +757,8 @@ export function CombatOverlay({
 function EnemyCluster({
   mobs,
   encounterMobs,
+  elements,
+  playerElement,
   animStates,
   hitFlash,
   floats,
@@ -746,6 +769,8 @@ function EnemyCluster({
 }: {
   mobs: CombatSession["mobs"];
   encounterMobs: EncounterMob[];
+  elements: Record<string, ElementOrb>;
+  playerElement: string | null;
   animStates: Record<string, AnimState>;
   hitFlash: Set<string>;
   floats: FloatingNumber[];
@@ -859,8 +884,16 @@ function EnemyCluster({
                       ))}
                   </div>
                   <div className="w-full max-w-[200px]">
-                    <div className="flex items-baseline justify-between text-[9px] font-semibold text-white drop-shadow">
-                      <span className="truncate">{mobMeta?.name_localized ?? m.name}</span>
+                    <div className="flex items-center justify-between gap-1 text-[9px] font-semibold text-white drop-shadow">
+                      <span className="flex min-w-0 items-center gap-1">
+                        {m.element && elements[m.element] ? (
+                          <ElementOrbView orb={elements[m.element] ?? null} size={16} />
+                        ) : null}
+                        <span className="truncate">{mobMeta?.name_localized ?? m.name}</span>
+                        {m.alive ? (
+                          <AdvantageBadge factor={elementMultiplier(playerElement, m.element)} />
+                        ) : null}
+                      </span>
                       <span className="tabular-nums text-abyss-fog">{m.hp}/{m.max_hp}</span>
                     </div>
                     <div className="h-1.5 w-full overflow-hidden rounded bg-abyss-coal/70 ring-1 ring-white/25">
@@ -920,6 +953,71 @@ function FFVIBox({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+/** A small element orb. With `animate` it cycles the 9-frame flicker
+ *  atlas (living element); otherwise it shows the single static frame.
+ *  Used both in the player party panel (big, animated) and beside each
+ *  enemy (tiny, static) as the affinity readout. */
+function ElementOrbView({
+  orb,
+  size,
+  animate = false,
+}: {
+  orb: ElementOrb | null;
+  size: number;
+  animate?: boolean;
+}) {
+  const frames = useMemo(
+    () => (orb?.orb_atlas && orb.orb_atlas.length > 0 ? orb.orb_atlas : orb?.orb_url ? [orb.orb_url] : []),
+    [orb],
+  );
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    if (!animate || frames.length <= 1) return;
+    frames.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+    const id = window.setInterval(() => setFrame((f) => (f + 1) % frames.length), 110);
+    return () => window.clearInterval(id);
+  }, [animate, frames]);
+
+  if (frames.length === 0) return null;
+  const src = animate ? (frames[frame] ?? frames[0]) : frames[0];
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={orb?.name ?? ""}
+      width={size}
+      height={size}
+      className="shrink-0 object-contain drop-shadow-[0_0_4px_rgba(120,120,255,0.35)]"
+      style={{ width: size, height: size, imageRendering: "pixelated" }}
+    />
+  );
+}
+
+/** Tiny chevron telling the player whether their element is strong (▲),
+ *  weak (▼) or neutral (—) against this enemy's element. Driven by the
+ *  same matrix the server uses, so it never lies about the math. */
+function AdvantageBadge({ factor }: { factor: number }) {
+  if (factor > 1) {
+    return (
+      <span className="shrink-0 font-black leading-none text-emerald-400" style={{ textShadow: "0 0 3px #000" }} title="ventaja">
+        ▲
+      </span>
+    );
+  }
+  if (factor < 1) {
+    return (
+      <span className="shrink-0 font-black leading-none text-rose-400" style={{ textShadow: "0 0 3px #000" }} title="desventaja">
+        ▼
+      </span>
+    );
+  }
+  return null;
 }
 
 /** HP / MP bar styled to match the FFVI panel: numeric readout on

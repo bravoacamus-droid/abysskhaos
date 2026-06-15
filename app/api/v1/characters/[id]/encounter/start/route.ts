@@ -262,12 +262,50 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const combatBackdropUrl =
     ((matchingProp.metadata as MobIdMeta).combat_backdrop_url as string | undefined) ?? null;
 
+  // Elemental orb catalog for the combat HUD affinity indicator. Scoped
+  // to the elements actually in play (player + mobs) so we ship only the
+  // orb art the overlay needs. Names localized like the rest of the UI.
+  const elementIds = Array.from(
+    new Set(
+      [combatSession.player_element, ...combatSession.mobs.map((m) => m.element)].filter(
+        (e): e is string => !!e,
+      ),
+    ),
+  );
+  const elements: Record<string, { name: string; orb_url: string | null; orb_atlas: string[] | null }> = {};
+  if (elementIds.length > 0) {
+    const { data: elemRows } = await supabase
+      .from("elements")
+      .select("id, name, orb_url, orb_atlas")
+      .in("id", elementIds);
+    const elemNameLoc = new Map<string, string>();
+    if (locale !== "en") {
+      const { data: tr } = await supabase
+        .from("translations")
+        .select("entity_id, value")
+        .eq("entity_type", "element")
+        .eq("locale", locale)
+        .eq("field", "name")
+        .in("entity_id", elementIds);
+      for (const row of tr ?? []) elemNameLoc.set(row.entity_id as string, row.value as string);
+    }
+    for (const row of elemRows ?? []) {
+      const id = row.id as string;
+      elements[id] = {
+        name: elemNameLoc.get(id) ?? (row.name as string),
+        orb_url: (row.orb_url as string | null) ?? null,
+        orb_atlas: (row.orb_atlas as string[] | null) ?? null,
+      };
+    }
+  }
+
   return NextResponse.json({
     data: {
       encounter_id: encounterId,
       mobs,
       combat_session: combatSession,
       combat_backdrop_url: combatBackdropUrl,
+      elements,
       room_state: roomState.data,
     },
   });

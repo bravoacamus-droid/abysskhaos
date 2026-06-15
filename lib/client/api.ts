@@ -553,6 +553,8 @@ export type CombatMobState = {
   atk: number;
   def: number;
   exp: number;
+  /** Canonical `elements.id` (or null/legacy) — drives the HUD affinity badge. */
+  element: string | null;
   alive: boolean;
   sprite_atlas: Record<string, string> | null;
   /** Per-(animation × direction) frame URLs. Used by CombatOverlay
@@ -583,6 +585,8 @@ export type CombatSession = {
   player_max_hp: number;
   player_atk: number;
   player_def: number;
+  /** The character's elemental affinity (`elements.id`) or null. */
+  player_element: string | null;
   mobs: CombatMobState[];
   turn_order: CombatTurn[];
   turn_idx: number;
@@ -591,9 +595,12 @@ export type CombatSession = {
   outcome: "victory" | "defeat" | null;
 };
 
+/** Orb art for one element, used by the combat HUD affinity indicator. */
+export type ElementOrb = { name: string; orb_url: string | null; orb_atlas: string[] | null };
+
 export function startEncounter(
   opts: FetchOpts & { characterId: string; encounterId: string; locale: string },
-): Promise<{ encounter_id: string; mobs: EncounterMob[]; combat_session: CombatSession; combat_backdrop_url: string | null; room_state: RoomState }> {
+): Promise<{ encounter_id: string; mobs: EncounterMob[]; combat_session: CombatSession; combat_backdrop_url: string | null; elements: Record<string, ElementOrb>; room_state: RoomState }> {
   return call(`/api/v1/characters/${opts.characterId}/encounter/start`, "POST", {
     initData: opts.initData,
     body: { encounter_id: opts.encounterId, locale: opts.locale },
