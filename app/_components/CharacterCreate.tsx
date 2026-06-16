@@ -269,17 +269,25 @@ function OptionGrid({
   );
 }
 
-/** Cycles a list of frame URLs as a looping animation (preloads to avoid
- *  first-loop flicker). Used to show each class swinging its weapon. */
+/** URLs already requested this session — so switching class/weapon never
+ *  re-downloads or re-decodes the same frame (the leak that crashed the
+ *  WebView: `new Image()` for every frame on every switch). */
+const PRELOADED = new Set<string>();
+
+/** Cycles a list of frame URLs as a looping animation. Preloads each URL
+ *  exactly once (deduped globally) to avoid first-loop flicker without
+ *  re-fetching on every class/weapon switch. */
 function AnimatedSprite({ frames, alt, fps = 10 }: { frames: string[]; alt: string; fps?: number }) {
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     setFrame(0);
-    if (frames.length <= 1) return;
-    frames.forEach((src) => {
+    for (const src of frames) {
+      if (PRELOADED.has(src)) continue;
+      PRELOADED.add(src);
       const img = new Image();
       img.src = src;
-    });
+    }
+    if (frames.length <= 1) return;
     const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), Math.round(1000 / fps));
     return () => clearInterval(id);
   }, [frames, fps]);
