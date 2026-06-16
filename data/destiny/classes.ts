@@ -16,8 +16,8 @@ export type DestinyClass = {
 };
 
 export const DESTINY_CLASSES: readonly DestinyClass[] = [
-  { id: "warrior", primaryA: "strength", primaryB: "strength", weaponPool: ["sword_1h_shield", "axe_1h_shield", "sword_2h", "axe_2h"] },
-  { id: "swordsman", primaryA: "strength", primaryB: "agility", weaponPool: ["sword_1h", "sword_2h"] },
+  { id: "warrior", primaryA: "strength", primaryB: "strength", weaponPool: ["sword_1h_shield", "axe_1h_shield", "axe_2h"] },
+  { id: "swordsman", primaryA: "strength", primaryB: "agility", weaponPool: ["sword_2h", "dual_swords"] },
   { id: "assassin", primaryA: "agility", primaryB: "intelligence", weaponPool: ["daggers", "bow"] },
   { id: "infiltrator", primaryA: "agility", primaryB: "intelligence", weaponPool: ["rifle", "pistol"] },
   { id: "mage", primaryA: "intelligence", primaryB: "spirit", weaponPool: ["grimoire", "staff"] },

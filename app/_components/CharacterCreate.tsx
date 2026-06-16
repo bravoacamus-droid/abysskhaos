@@ -331,7 +331,7 @@ function ClassPicker({
 
   const active = classes.find((c) => c.id === classId) ?? classes[0] ?? null;
   const activeWeapon = weaponLoadoutId ?? active?.weapon_pool[0] ?? null;
-  const frames = active && activeWeapon ? active.combat_attacks[activeWeapon] ?? [] : [];
+  const frames = active && activeWeapon ? active.combat_preview[activeWeapon] ?? [] : [];
 
   return (
     <section className="space-y-4">

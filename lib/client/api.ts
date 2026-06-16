@@ -68,9 +68,9 @@ export type ClassRow = {
   description_localized: string;
   /** Initial weapon-loadout ids the class can start with (player picks one). */
   weapon_pool: string[];
-  /** Attack-animation frames (south-west) per weapon family, for the animated
-   *  class/weapon picker in creation. */
-  combat_attacks: Record<string, string[]>;
+  /** Per-weapon-family PREVIEW clip (south-west frames) for the creation picker:
+   *  skill→attack→defeat (mage: 4 skills→defeat). Played as one looping clip. */
+  combat_preview: Record<string, string[]>;
 };
 
 export type CharacterRow = {

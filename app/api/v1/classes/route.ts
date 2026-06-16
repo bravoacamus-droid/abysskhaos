@@ -9,18 +9,26 @@ export const dynamic = "force-dynamic";
 
 const ATLAS_FACING = "south-west";
 
-/** Pull the per-weapon-family ATTACK frames (south-west) out of a class's
- *  combat_animation_atlas so the creation picker can play the attack loop for
- *  each weapon the class can start with. */
-function extractCombatAttacks(
+/** Build the per-weapon-family creation-PREVIEW frame sequence (south-west)
+ *  out of a class's combat_animation_atlas. The picker plays this as one
+ *  looping clip so the player sees the class's moves with each weapon:
+ *    - normal classes:  skill → basic attack → defeat
+ *    - mage (per the user): ALL 4 elemental skills → defeat  (no basic attack)
+ *  The mage is detected by the presence of a `skill_fire_<family>` key. */
+function extractCombatPreview(
   klass: DestinyClass | undefined,
   atlas: Record<string, Record<string, string[]>> | null,
 ): Record<string, string[]> {
   if (!klass || !atlas) return {};
   const out: Record<string, string[]> = {};
   for (const family of klass.weaponPool) {
-    const frames = atlas[`attack_${family}`]?.[ATLAS_FACING];
-    if (frames && frames.length > 0) out[family] = frames;
+    const frames = (state: string) => atlas[`${state}_${family}`]?.[ATLAS_FACING] ?? [];
+    const isMage = frames("skill_fire").length > 0;
+    const sequence = isMage
+      ? ["skill_fire", "skill_thunder", "skill_ice", "skill_heal", "death"]
+      : ["skill", "attack", "death"];
+    const seq = sequence.flatMap(frames);
+    if (seq.length > 0) out[family] = seq;
   }
   return out;
 }
@@ -79,7 +87,7 @@ export async function GET(req: Request) {
       // Player-chosen creation: the weapon pool + the attack animation frames
       // per weapon so the picker can show the animated character with each weapon.
       weapon_pool: klass ? [...klass.weaponPool] : [],
-      combat_attacks: extractCombatAttacks(klass, combat_animation_atlas),
+      combat_preview: extractCombatPreview(klass, combat_animation_atlas),
     };
   });
 

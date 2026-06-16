@@ -159,7 +159,7 @@ test("runDestiny returns a complete build with the CHOSEN class + weapon", () =>
 
 test("runDestiny rejects underage, invalid answers, and invalid class/weapon", () => {
   const ref = new Date("2026-06-11T00:00:00Z");
-  const ok = { classId: "warrior", weaponLoadoutId: "sword_2h" };
+  const ok = { classId: "warrior", weaponLoadoutId: "axe_2h" };
   assert.throws(() => runDestiny({ birthDate: "2020-01-01", occupationId: "ingeniero", hobbyId: "leer", ...ok }, ref, mulberry32(1)), /UNDERAGE/);
   assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "nope", hobbyId: "leer", ...ok }, ref, mulberry32(1)), /INVALID_OCCUPATION/);
   assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "ingeniero", hobbyId: "nope", ...ok }, ref, mulberry32(1)), /INVALID_HOBBY/);
