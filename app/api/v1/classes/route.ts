@@ -12,8 +12,9 @@ const ATLAS_FACING = "south-west";
 /** Build the per-weapon-family creation-PREVIEW frame sequence (south-west)
  *  out of a class's combat_animation_atlas. The picker plays this as one
  *  looping clip so the player sees the class's moves with each weapon:
- *    - normal classes:  skill → basic attack → defeat
- *    - mage (per the user): ALL 4 elemental skills → defeat  (no basic attack)
+ *    - normal classes:  skill → basic attack
+ *    - mage (per the user): ALL 4 elemental skills  (no basic attack)
+ *  No defeat animation in the preview (per the user — it didn't fit).
  *  The mage is detected by the presence of a `skill_fire_<family>` key. */
 function extractCombatPreview(
   klass: DestinyClass | undefined,
@@ -25,8 +26,8 @@ function extractCombatPreview(
     const frames = (state: string) => atlas[`${state}_${family}`]?.[ATLAS_FACING] ?? [];
     const isMage = frames("skill_fire").length > 0;
     const sequence = isMage
-      ? ["skill_fire", "skill_thunder", "skill_ice", "skill_heal", "death"]
-      : ["skill", "attack", "death"];
+      ? ["skill_fire", "skill_thunder", "skill_ice", "skill_heal"]
+      : ["skill", "attack"];
     const seq = sequence.flatMap(frames);
     if (seq.length > 0) out[family] = seq;
   }
