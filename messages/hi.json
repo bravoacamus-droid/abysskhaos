@@ -307,7 +307,10 @@
       "bow": "Bow",
       "short_dagger": "Short dagger",
       "grimoire": "Grimoire",
-      "staff": "Staff"
-    }
+      "staff": "Staff",
+      "rifle": "Rifle"
+    },
+    "step_class": "Choose your class",
+    "step_class_hint": "Switch weapons to preview each combat style."
   }
 }

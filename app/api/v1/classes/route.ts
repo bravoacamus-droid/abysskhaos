@@ -1,9 +1,29 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { DESTINY_CLASS_BY_ID, type DestinyClass } from "@/data/destiny/classes";
+import type { ClassId } from "@/data/destiny/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const ATLAS_FACING = "south-west";
+
+/** Pull the per-weapon-family ATTACK frames (south-west) out of a class's
+ *  combat_animation_atlas so the creation picker can play the attack loop for
+ *  each weapon the class can start with. */
+function extractCombatAttacks(
+  klass: DestinyClass | undefined,
+  atlas: Record<string, Record<string, string[]>> | null,
+): Record<string, string[]> {
+  if (!klass || !atlas) return {};
+  const out: Record<string, string[]> = {};
+  for (const family of klass.weaponPool) {
+    const frames = atlas[`attack_${family}`]?.[ATLAS_FACING];
+    if (frames && frames.length > 0) out[family] = frames;
+  }
+  return out;
+}
 
 /**
  * Public read of the 5 base classes (with portraits) so the character
@@ -19,7 +39,7 @@ export async function GET(req: Request) {
   const { data: classes, error } = await supabase
     .from("classes")
     .select(
-      "id, name, description, primary_attr_a_id, primary_attr_b_id, starting_hp, starting_mp, starting_atk, starting_def, sort_order, portrait_url",
+      "id, name, description, primary_attr_a_id, primary_attr_b_id, starting_hp, starting_mp, starting_atk, starting_def, sort_order, portrait_url, combat_animation_atlas",
     )
     .order("sort_order", { ascending: true });
   if (error) {
@@ -48,10 +68,18 @@ export async function GET(req: Request) {
 
   const data = (classes ?? []).map((c) => {
     const tr = translations.get(c.id) ?? {};
+    const klass = DESTINY_CLASS_BY_ID[c.id as ClassId];
+    const { combat_animation_atlas, ...rest } = c as typeof c & {
+      combat_animation_atlas: Record<string, Record<string, string[]>> | null;
+    };
     return {
-      ...c,
+      ...rest,
       name_localized: tr.name ?? c.name,
       description_localized: tr.description ?? c.description,
+      // Player-chosen creation: the weapon pool + the attack animation frames
+      // per weapon so the picker can show the animated character with each weapon.
+      weapon_pool: klass ? [...klass.weaponPool] : [],
+      combat_attacks: extractCombatAttacks(klass, combat_animation_atlas),
     };
   });
 

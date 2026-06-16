@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, createCharacter, type CreatedCharacter } from "@/lib/client/api";
+import { ApiError, createCharacter, type ClassRow, type CreatedCharacter } from "@/lib/client/api";
 import { OCCUPATION_IDS, HOBBY_IDS } from "@/lib/client/destiny-options";
 import { t, type Locale } from "@/lib/i18n";
 
 const NAME_PATTERN = /^[\p{L}\p{N} _.\-']{1,24}$/u;
 const MIN_AGE = 13;
 
-type Step = "birth" | "occupation" | "hobby" | "name";
-const STEPS: Step[] = ["birth", "occupation", "hobby", "name"];
+type Step = "birth" | "occupation" | "hobby" | "class" | "name";
+const STEPS: Step[] = ["birth", "occupation", "hobby", "class", "name"];
 
 type Props = {
   initData: string;
   locale: Locale;
+  classes: ClassRow[];
   onCreated: (character: CreatedCharacter) => void;
   onCancel?: () => void;
 };
@@ -30,11 +31,13 @@ function ageFromBirth(birthDate: string): number | null {
   return age;
 }
 
-export default function CharacterCreate({ initData, locale, onCreated, onCancel }: Props) {
+export default function CharacterCreate({ initData, locale, classes, onCreated, onCancel }: Props) {
   const [step, setStep] = useState<Step>("birth");
   const [birthDate, setBirthDate] = useState("");
   const [occupationId, setOccupationId] = useState<string | null>(null);
   const [hobbyId, setHobbyId] = useState<string | null>(null);
+  const [classId, setClassId] = useState<string | null>(null);
+  const [weaponLoadoutId, setWeaponLoadoutId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedCharacter | null>(null);
@@ -43,14 +46,24 @@ export default function CharacterCreate({ initData, locale, onCreated, onCancel 
   const age = ageFromBirth(birthDate);
   const birthValid = age !== null && age >= MIN_AGE && age < 120;
   const nameValid = NAME_PATTERN.test(name);
+  const classValid = !!classId && !!weaponLoadoutId;
   const todayStr = new Date().toISOString().slice(0, 10);
 
   async function submit() {
-    if (!birthValid || !occupationId || !hobbyId || !nameValid) return;
+    if (!birthValid || !occupationId || !hobbyId || !classValid || !nameValid) return;
     setSubmitting(true);
     setError(null);
     try {
-      const character = await createCharacter({ initData, name, birthDate, occupationId, hobbyId, locale });
+      const character = await createCharacter({
+        initData,
+        name,
+        birthDate,
+        occupationId,
+        hobbyId,
+        classId: classId!,
+        weaponLoadoutId: weaponLoadoutId!,
+        locale,
+      });
       setCreated(character);
     } catch (err) {
       setError(humanizeError(err, locale));
@@ -126,6 +139,21 @@ export default function CharacterCreate({ initData, locale, onCreated, onCancel 
           selected={hobbyId}
           onSelect={setHobbyId}
           onBack={() => setStep("occupation")}
+          onContinue={() => setStep("class")}
+        />
+      ) : null}
+
+      {step === "class" ? (
+        <ClassPicker
+          locale={locale}
+          classes={classes}
+          classId={classId}
+          weaponLoadoutId={weaponLoadoutId}
+          onPick={(cid, wid) => {
+            setClassId(cid);
+            setWeaponLoadoutId(wid);
+          }}
+          onBack={() => setStep("hobby")}
           onContinue={() => setStep("name")}
         />
       ) : null}
@@ -146,7 +174,7 @@ export default function CharacterCreate({ initData, locale, onCreated, onCancel 
             <p className="text-center text-xs text-abyss-ember">{t(locale, "wizard.name_invalid")}</p>
           ) : null}
           <div className="flex gap-3">
-            <SecondaryButton disabled={submitting} onClick={() => setStep("hobby")}>
+            <SecondaryButton disabled={submitting} onClick={() => setStep("class")}>
               {t(locale, "wizard.back")}
             </SecondaryButton>
             <button
@@ -234,6 +262,136 @@ function OptionGrid({
       <div className="flex gap-3">
         <SecondaryButton onClick={onBack}>{t(locale, "wizard.back")}</SecondaryButton>
         <PrimaryButton disabled={!selected} onClick={onContinue}>
+          {t(locale, "wizard.next")}
+        </PrimaryButton>
+      </div>
+    </section>
+  );
+}
+
+/** Cycles a list of frame URLs as a looping animation (preloads to avoid
+ *  first-loop flicker). Used to show each class swinging its weapon. */
+function AnimatedSprite({ frames, alt, fps = 10 }: { frames: string[]; alt: string; fps?: number }) {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    setFrame(0);
+    if (frames.length <= 1) return;
+    frames.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+    const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), Math.round(1000 / fps));
+    return () => clearInterval(id);
+  }, [frames, fps]);
+  if (frames.length === 0) {
+    return <div className="flex h-40 items-center justify-center text-xs text-abyss-fog">—</div>;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={frames[Math.min(frame, frames.length - 1)] ?? frames[0]}
+      alt={alt}
+      className="mx-auto h-40 w-40 object-contain drop-shadow-[0_0_14px_rgba(120,120,255,0.3)]"
+      style={{ imageRendering: "pixelated" }}
+    />
+  );
+}
+
+/**
+ * Class + initial-weapon picker. Shows the chosen class as its ANIMATED attack
+ * sprite, with a weapon toggle so the player previews every starting weapon's
+ * style before committing (2026-06-16: class is chosen, not rolled).
+ */
+function ClassPicker({
+  locale,
+  classes,
+  classId,
+  weaponLoadoutId,
+  onPick,
+  onBack,
+  onContinue,
+}: {
+  locale: Locale;
+  classes: ClassRow[];
+  classId: string | null;
+  weaponLoadoutId: string | null;
+  onPick: (classId: string, weaponLoadoutId: string) => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  // Default-select the first class + its first weapon so a preview is always
+  // shown and Continue can be enabled once the player confirms.
+  useEffect(() => {
+    if (!classId && classes.length > 0) {
+      const first = classes[0]!;
+      const w = first.weapon_pool[0];
+      if (w) onPick(first.id, w);
+    }
+  }, [classId, classes, onPick]);
+
+  const active = classes.find((c) => c.id === classId) ?? classes[0] ?? null;
+  const activeWeapon = weaponLoadoutId ?? active?.weapon_pool[0] ?? null;
+  const frames = active && activeWeapon ? active.combat_attacks[activeWeapon] ?? [] : [];
+
+  return (
+    <section className="space-y-4">
+      <StepHead locale={locale} title="destiny.step_class" hint="destiny.step_class_hint" />
+
+      {/* Class chips */}
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {classes.map((c) => {
+          const isSel = c.id === active?.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onPick(c.id, c.weapon_pool[0] ?? "")}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-widest transition ${
+                isSel
+                  ? "border-abyss-soul/80 bg-abyss-ink text-white"
+                  : "border-abyss-coal/80 bg-abyss-deep text-abyss-mist hover:border-abyss-khaos/60"
+              }`}
+            >
+              {c.name_localized}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Animated attack preview */}
+      <div className="rounded-lg border border-abyss-soul/30 bg-abyss-deep p-3">
+        <AnimatedSprite frames={frames} alt={active?.name_localized ?? ""} />
+        {active ? (
+          <p className="mt-1 text-center text-xs text-abyss-fog">{active.description_localized}</p>
+        ) : null}
+      </div>
+
+      {/* Weapon toggle */}
+      {active ? (
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {active.weapon_pool.map((w) => {
+            const isSel = w === activeWeapon;
+            return (
+              <button
+                key={w}
+                type="button"
+                onClick={() => onPick(active.id, w)}
+                className={`rounded-md border px-3 py-1.5 text-xs transition ${
+                  isSel
+                    ? "border-abyss-khaos bg-abyss-khaos/20 text-white"
+                    : "border-abyss-coal/80 bg-abyss-deep text-abyss-mist hover:border-abyss-khaos/60"
+                }`}
+              >
+                {t(locale, `destiny.weapon.${w}`)}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="flex gap-3">
+        <SecondaryButton onClick={onBack}>{t(locale, "wizard.back")}</SecondaryButton>
+        <PrimaryButton disabled={!classId || !weaponLoadoutId} onClick={onContinue}>
           {t(locale, "wizard.next")}
         </PrimaryButton>
       </div>

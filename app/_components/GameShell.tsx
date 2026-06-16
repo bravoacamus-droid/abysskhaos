@@ -247,6 +247,7 @@ export default function GameShell() {
         <CharacterCreate
           initData={initData}
           locale={locale}
+          classes={state.classes}
           onCreated={handleCreated}
           onCancel={
             state.activeId

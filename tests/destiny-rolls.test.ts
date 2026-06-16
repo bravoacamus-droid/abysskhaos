@@ -141,10 +141,15 @@ test("zodiacForYear maps known years", () => {
   assert.equal(zodiacForYear(2024).id, "dragon");
 });
 
-test("runDestiny returns a complete, valid build", () => {
+test("runDestiny returns a complete build with the CHOSEN class + weapon", () => {
   const ref = new Date("2026-06-11T00:00:00Z");
-  const out = runDestiny({ birthDate: "1995-04-12", occupationId: "ingeniero", hobbyId: "programar_hobby" }, ref, mulberry32(42));
-  assert.ok(ALL_CLASS_IDS.includes(out.classId));
+  const out = runDestiny(
+    { birthDate: "1995-04-12", occupationId: "ingeniero", hobbyId: "programar_hobby", classId: "mage", weaponLoadoutId: "staff" },
+    ref,
+    mulberry32(42),
+  );
+  assert.equal(out.classId, "mage"); // chosen, not rolled
+  assert.equal(out.weaponLoadoutId, "staff"); // chosen
   assert.ok(DESTINY_CLASS_BY_ID[out.classId].weaponPool.includes(out.weaponLoadoutId));
   assert.ok(PET_FAMILIES.has(out.companionId));
   assert.ok(ALL_PASSIVE_IDS.includes(out.passiveId));
@@ -152,10 +157,13 @@ test("runDestiny returns a complete, valid build", () => {
   assert.equal(out.meta.zodiacId, "cerdo"); // 1995 = Pig
 });
 
-test("runDestiny rejects underage and invalid answers", () => {
+test("runDestiny rejects underage, invalid answers, and invalid class/weapon", () => {
   const ref = new Date("2026-06-11T00:00:00Z");
-  assert.throws(() => runDestiny({ birthDate: "2020-01-01", occupationId: "ingeniero", hobbyId: "leer" }, ref, mulberry32(1)), /UNDERAGE/);
-  assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "nope", hobbyId: "leer" }, ref, mulberry32(1)), /INVALID_OCCUPATION/);
-  assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "ingeniero", hobbyId: "nope" }, ref, mulberry32(1)), /INVALID_HOBBY/);
-  assert.throws(() => runDestiny({ birthDate: "bad", occupationId: "ingeniero", hobbyId: "leer" }, ref, mulberry32(1)), /INVALID_BIRTH_DATE/);
+  const ok = { classId: "warrior", weaponLoadoutId: "sword_2h" };
+  assert.throws(() => runDestiny({ birthDate: "2020-01-01", occupationId: "ingeniero", hobbyId: "leer", ...ok }, ref, mulberry32(1)), /UNDERAGE/);
+  assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "nope", hobbyId: "leer", ...ok }, ref, mulberry32(1)), /INVALID_OCCUPATION/);
+  assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "ingeniero", hobbyId: "nope", ...ok }, ref, mulberry32(1)), /INVALID_HOBBY/);
+  assert.throws(() => runDestiny({ birthDate: "bad", occupationId: "ingeniero", hobbyId: "leer", ...ok }, ref, mulberry32(1)), /INVALID_BIRTH_DATE/);
+  assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "ingeniero", hobbyId: "leer", classId: "nope", weaponLoadoutId: "sword_2h" }, ref, mulberry32(1)), /INVALID_CLASS/);
+  assert.throws(() => runDestiny({ birthDate: "1990-01-01", occupationId: "ingeniero", hobbyId: "leer", classId: "warrior", weaponLoadoutId: "staff" }, ref, mulberry32(1)), /INVALID_WEAPON/);
 });

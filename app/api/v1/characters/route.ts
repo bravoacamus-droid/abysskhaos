@@ -60,6 +60,8 @@ type CreateBody = {
   birth_date?: unknown;
   occupation_id?: unknown;
   hobby_id?: unknown;
+  class_id?: unknown;
+  weapon_loadout_id?: unknown;
   locale?: unknown;
   slot_index?: unknown;
 };
@@ -159,13 +161,26 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  if (!isNonEmptyString(body.class_id) || !isNonEmptyString(body.weapon_loadout_id)) {
+    return NextResponse.json(
+      { error: "INVALID_CHOICE", detail: "class_id and weapon_loadout_id are required" },
+      { status: 400 },
+    );
+  }
 
   // --- Destiny roll (server-authoritative, server seed) ----------------------
+  // Class + weapon are player-chosen (validated in runDestiny); the rest rolls.
   const seed = secureSeed();
   let destiny;
   try {
     destiny = runDestiny(
-      { birthDate: body.birth_date, occupationId: body.occupation_id, hobbyId: body.hobby_id },
+      {
+        birthDate: body.birth_date,
+        occupationId: body.occupation_id,
+        hobbyId: body.hobby_id,
+        classId: body.class_id,
+        weaponLoadoutId: body.weapon_loadout_id,
+      },
       new Date(),
       mulberry32(seed),
     );

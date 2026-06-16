@@ -66,6 +66,11 @@ export type ClassRow = {
   portrait_url: string | null;
   name_localized: string;
   description_localized: string;
+  /** Initial weapon-loadout ids the class can start with (player picks one). */
+  weapon_pool: string[];
+  /** Attack-animation frames (south-west) per weapon family, for the animated
+   *  class/weapon picker in creation. */
+  combat_attacks: Record<string, string[]>;
 };
 
 export type CharacterRow = {
@@ -146,6 +151,8 @@ export function createCharacter(
     birthDate: string;
     occupationId: string;
     hobbyId: string;
+    classId: string;
+    weaponLoadoutId: string;
     locale: string;
     slotIndex?: number;
   },
@@ -157,6 +164,8 @@ export function createCharacter(
       birth_date: opts.birthDate,
       occupation_id: opts.occupationId,
       hobby_id: opts.hobbyId,
+      class_id: opts.classId,
+      weapon_loadout_id: opts.weaponLoadoutId,
       locale: opts.locale,
       slot_index: opts.slotIndex,
     },

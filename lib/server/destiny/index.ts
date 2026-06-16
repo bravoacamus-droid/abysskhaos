@@ -11,17 +11,22 @@ import { OCCUPATION_BY_ID } from "@/data/destiny/occupations";
 import { HOBBY_BY_ID } from "@/data/destiny/hobbies";
 import { ageBandForAge, MIN_PLAYER_AGE } from "@/data/destiny/age-bands";
 import { zodiacForYear } from "@/data/destiny/zodiac";
+import { DESTINY_CLASS_BY_ID, ALL_CLASS_IDS } from "@/data/destiny/classes";
 import type { ClassId, CompanionId, ElementId, PassiveId, WeaponLoadoutId } from "@/data/destiny/types";
 
 import { rollAttributes, type RolledAttributes } from "./attributes";
 import { secureSeed, mulberry32, type Rng } from "./rng";
-import { combineTendencies, rollClass, rollCompanion, rollElement, rollPassive, rollWeapon } from "./rolls";
+import { rollCompanion, rollElement, rollPassive } from "./rolls";
 
 export type DestinyAnswers = {
   /** ISO date "YYYY-MM-DD". */
   birthDate: string;
   occupationId: string;
   hobbyId: string;
+  /** Player-CHOSEN class + initial weapon (2026-06-16: class is no longer
+   *  rolled — the player picks it after the quiz; the rest stays rolled). */
+  classId: string;
+  weaponLoadoutId: string;
 };
 
 export type DestinyResult = {
@@ -63,6 +68,13 @@ export function runDestiny(answers: DestinyAnswers, referenceDate: Date, rng: Rn
   if (!occupation) throw new Error("INVALID_OCCUPATION");
   if (!hobby) throw new Error("INVALID_HOBBY");
 
+  // Class + weapon are player-chosen (validated here, not rolled).
+  if (!ALL_CLASS_IDS.includes(answers.classId as ClassId)) throw new Error("INVALID_CLASS");
+  const classId = answers.classId as ClassId;
+  const pool = DESTINY_CLASS_BY_ID[classId].weaponPool;
+  if (!pool.includes(answers.weaponLoadoutId as WeaponLoadoutId)) throw new Error("INVALID_WEAPON");
+  const weaponLoadoutId = answers.weaponLoadoutId as WeaponLoadoutId;
+
   const birth = parseBirthDate(answers.birthDate);
   const age = ageFromBirthDate(birth, referenceDate);
   if (age < MIN_PLAYER_AGE) throw new Error("UNDERAGE");
@@ -70,13 +82,9 @@ export function runDestiny(answers: DestinyAnswers, referenceDate: Date, rng: Rn
   const zodiac = zodiacForYear(birth.year);
   const ageBand = ageBandForAge(age);
 
-  const tendency = combineTendencies(zodiac.tendency, ageBand.tendency, occupation.tendency, hobby.tendency);
-  const lean = (occupation.lean + hobby.lean) / 2;
-
-  const classId = rollClass(tendency, lean, rng);
+  // Element / companion / passive / attributes are still rolled from the quiz.
   const elementId = rollElement(rng);
   const companionId = rollCompanion(occupation, hobby, rng);
-  const weaponLoadoutId = rollWeapon(classId, rng);
   const attributes = rollAttributes(classId, rng);
   const passiveId = rollPassive(occupation, hobby, rng);
 
