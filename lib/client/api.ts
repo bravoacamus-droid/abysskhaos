@@ -103,13 +103,17 @@ export type CharacterRow = {
 export type DestinyReveal = {
   class_name: string;
   element_name: string;
+  element_color: string | null;
   element_orb_url: string | null;
   /** 9 animation frames (PixelLab element-flicker), cycled for the living orb. */
   element_orb_atlas: string[] | null;
   companion_name: string;
+  /** Pet greeting → skill → idea frame lists, played in the companion spotlight. */
+  companion_clips: { greeting: string[]; skill: string[]; idea: string[] } | null;
   passive_name: string;
   passive_value: number;
   passive_sign: "+" | "-";
+  passive_icon_url: string | null;
   weapon_loadout_id: string;
   zodiac_id: string;
   age_band_id: string;

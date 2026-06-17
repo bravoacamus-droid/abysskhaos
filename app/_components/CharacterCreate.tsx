@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, createCharacter, type ClassRow, type CreatedCharacter } from "@/lib/client/api";
 import { OCCUPATION_IDS, HOBBY_IDS } from "@/lib/client/destiny-options";
+import {
+  ELEMENT_INTROS,
+  COMPANION_INTROS,
+  PASSIVE_INTROS,
+  revealIntro,
+} from "@/data/destiny/reveal-intros";
 import { t, type Locale } from "@/lib/i18n";
 
 const NAME_PATTERN = /^[\p{L}\p{N} _.\-']{1,24}$/u;
@@ -416,10 +422,12 @@ function OrbDisplay({
   atlas,
   fallback,
   alt,
+  size = 112,
 }: {
   atlas: string[] | null;
   fallback: string | null;
   alt: string;
+  size?: number;
 }) {
   const frames = atlas && atlas.length > 0 ? atlas : fallback ? [fallback] : [];
   const [frame, setFrame] = useState(0);
@@ -440,10 +448,54 @@ function OrbDisplay({
     <img
       src={frames[frame] ?? frames[0]}
       alt={alt}
-      width={112}
-      height={112}
-      className="mx-auto h-28 w-28 object-contain drop-shadow-[0_0_12px_rgba(120,120,255,0.35)]"
-      style={{ imageRendering: "pixelated" }}
+      width={size}
+      height={size}
+      className="mx-auto object-contain drop-shadow-[0_0_16px_rgba(120,120,255,0.4)]"
+      style={{ imageRendering: "pixelated", width: size, height: size }}
+    />
+  );
+}
+
+/**
+ * Plays a pet's reveal clips (greeting → skill → idea) as one looping sequence.
+ * Pets are single-facing (south-west); frames are preloaded to avoid flicker.
+ */
+function PetPlayer({
+  clips,
+  alt,
+  size = 144,
+}: {
+  clips: { greeting: string[]; skill: string[]; idea: string[] } | null;
+  alt: string;
+  size?: number;
+}) {
+  const frames = useMemo(
+    () => (clips ? [...clips.greeting, ...clips.skill, ...clips.idea] : []),
+    [clips],
+  );
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    setFrame(0);
+    if (frames.length <= 1) return;
+    frames.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+    const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), 110);
+    return () => clearInterval(id);
+  }, [frames.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (frames.length === 0) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={frames[frame] ?? frames[0]}
+      alt={alt}
+      width={size}
+      height={size}
+      className="mx-auto object-contain drop-shadow-[0_0_14px_rgba(120,120,255,0.35)]"
+      style={{ imageRendering: "pixelated", width: size, height: size }}
     />
   );
 }
@@ -459,44 +511,128 @@ function Reveal({
 }) {
   const d = character.destiny;
   const sign = d.passive_sign === "-" ? "−" : "+";
+  const [step, setStep] = useState(0);
+
+  // 3 spotlight steps — each with the destiny's spotlight given its protagonism:
+  // the living element orb, the animated companion, then the unique Don.
+  const spotlights: { kicker: string; title: string; badge?: string; intro: string; visual: React.ReactNode }[] = [
+    {
+      kicker: t(locale, "destiny.reveal_element"),
+      title: d.element_name,
+      intro: revealIntro(ELEMENT_INTROS, character.element_id, locale),
+      visual: <OrbDisplay atlas={d.element_orb_atlas} fallback={d.element_orb_url} alt={d.element_name} size={160} />,
+    },
+    {
+      kicker: t(locale, "destiny.reveal_companion"),
+      title: d.companion_name,
+      intro: revealIntro(COMPANION_INTROS, character.companion_id, locale),
+      visual: <PetPlayer clips={d.companion_clips} alt={d.companion_name} size={160} />,
+    },
+    {
+      kicker: t(locale, "destiny.reveal_passive"),
+      title: d.passive_name,
+      badge: `${sign}${d.passive_value}%`,
+      intro: revealIntro(PASSIVE_INTROS, character.passive_id, locale),
+      visual: <PassiveSigil iconUrl={d.passive_icon_url} accent={d.element_color} alt={d.passive_name} />,
+    },
+  ];
+  const cur = spotlights[step]!;
+  const isLast = step === spotlights.length - 1;
+
   return (
-    <div className="space-y-5 text-center">
+    <div className="space-y-6 text-center">
       <h1 className="bg-gradient-to-b from-abyss-soul via-abyss-khaos to-abyss-ember bg-clip-text text-2xl font-bold uppercase tracking-widest text-transparent">
         {t(locale, "destiny.reveal_title")}
       </h1>
-      <p className="text-3xl font-bold text-white">{character.name}</p>
+      <p className="text-2xl font-bold text-white">{character.name}</p>
 
-      <OrbDisplay atlas={d.element_orb_atlas} fallback={d.element_orb_url} alt={d.element_name} />
-
-      <div className="space-y-2 rounded-lg border border-abyss-soul/40 bg-abyss-deep p-5 text-left">
-        <RevealRow label={t(locale, "destiny.reveal_class")} value={d.class_name} />
-        <RevealRow label={t(locale, "destiny.reveal_element")} value={d.element_name} />
-        <RevealRow label={t(locale, "destiny.reveal_companion")} value={d.companion_name} />
-        <RevealRow
-          label={t(locale, "destiny.reveal_passive")}
-          value={`${d.passive_name} (${sign}${d.passive_value}%)`}
-        />
-        <RevealRow label={t(locale, "destiny.reveal_weapon")} value={t(locale, `destiny.weapon.${d.weapon_loadout_id}`)} />
+      <div className="space-y-3">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-abyss-fog">{cur.kicker}</p>
+        <div className="flex min-h-[172px] items-center justify-center">{cur.visual}</div>
+        <p className="text-2xl font-bold text-white">
+          {cur.title}
+          {cur.badge ? <span className="ml-2 align-middle text-base font-semibold text-abyss-soul">{cur.badge}</span> : null}
+        </p>
+        <p className="mx-auto max-w-sm text-sm leading-relaxed text-abyss-mist">{cur.intro}</p>
       </div>
 
-      <dl className="grid grid-cols-4 gap-2 text-xs">
-        <Stat label="STR" value={character.attr_strength} />
-        <Stat label="AGI" value={character.attr_agility} />
-        <Stat label="INT" value={character.attr_intelligence} />
-        <Stat label="SPI" value={character.attr_spirit} />
-        <Stat label={t(locale, "hub.stats.hp")} value={character.hp_max} />
-        <Stat label={t(locale, "hub.stats.mp")} value={character.mp_max} />
-        <Stat label={t(locale, "hub.stats.atk")} value={character.atk} />
-        <Stat label={t(locale, "hub.stats.def")} value={character.def} />
-      </dl>
+      <RevealDots step={step} total={spotlights.length} />
 
-      <button
-        type="button"
-        onClick={onEnter}
-        className="w-full rounded-md bg-abyss-khaos py-3 text-sm font-semibold uppercase tracking-widest text-white transition hover:bg-abyss-khaos/80"
-      >
-        {t(locale, "destiny.enter")}
-      </button>
+      {isLast ? (
+        <div className="space-y-3">
+          <div className="space-y-2 rounded-lg border border-abyss-soul/40 bg-abyss-deep p-4 text-left">
+            <RevealRow label={t(locale, "destiny.reveal_class")} value={d.class_name} />
+            <RevealRow label={t(locale, "destiny.reveal_weapon")} value={t(locale, `destiny.weapon.${d.weapon_loadout_id}`)} />
+          </div>
+          <dl className="grid grid-cols-4 gap-2 text-xs">
+            <Stat label="STR" value={character.attr_strength} />
+            <Stat label="AGI" value={character.attr_agility} />
+            <Stat label="INT" value={character.attr_intelligence} />
+            <Stat label="SPI" value={character.attr_spirit} />
+            <Stat label={t(locale, "hub.stats.hp")} value={character.hp_max} />
+            <Stat label={t(locale, "hub.stats.mp")} value={character.mp_max} />
+            <Stat label={t(locale, "hub.stats.atk")} value={character.atk} />
+            <Stat label={t(locale, "hub.stats.def")} value={character.def} />
+          </dl>
+        </div>
+      ) : null}
+
+      <div className="flex gap-3">
+        {step > 0 ? (
+          <SecondaryButton onClick={() => setStep((s) => s - 1)}>{t(locale, "wizard.back")}</SecondaryButton>
+        ) : null}
+        {isLast ? (
+          <button
+            type="button"
+            onClick={onEnter}
+            className="flex-1 rounded-md bg-abyss-khaos py-3 text-sm font-semibold uppercase tracking-widest text-white transition hover:bg-abyss-khaos/80"
+          >
+            {t(locale, "destiny.enter")}
+          </button>
+        ) : (
+          <PrimaryButton onClick={() => setStep((s) => s + 1)}>{t(locale, "wizard.next")}</PrimaryButton>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RevealDots({ step, total }: { step: number; total: number }) {
+  return (
+    <div className="flex justify-center gap-2">
+      {Array.from({ length: total }).map((_, i) => (
+        <span
+          key={i}
+          className={`h-1.5 rounded-full transition-all ${i === step ? "w-5 bg-abyss-soul" : "w-1.5 bg-abyss-coal"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** The Don's sigil. Uses the passive icon once it exists (Phase 3); until then,
+ *  a glowing rune tinted by the element color so the step still has presence. */
+function PassiveSigil({ iconUrl, accent, alt }: { iconUrl: string | null; accent: string | null; alt: string }) {
+  const color = accent ?? "#7c7cff";
+  if (iconUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={iconUrl}
+        alt={alt}
+        width={128}
+        height={128}
+        className="mx-auto object-contain drop-shadow-[0_0_16px_rgba(120,120,255,0.4)]"
+        style={{ imageRendering: "pixelated", width: 128, height: 128 }}
+      />
+    );
+  }
+  return (
+    <div
+      className="mx-auto flex h-32 w-32 items-center justify-center rounded-full border-2 bg-abyss-deep/60"
+      style={{ borderColor: color, boxShadow: `0 0 26px ${color}55` }}
+    >
+      <span className="text-5xl" style={{ color }}>✦</span>
     </div>
   );
 }
