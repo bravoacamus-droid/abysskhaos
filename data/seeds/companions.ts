@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { upsertWithI18n, type RecordTranslations, type SeedReport } from "./_types";
+import { COMPANION_ELEMENTS } from "../destiny/companion-elements";
 
 const companions = [
   { id: "drake", name: "Drake", description: "Fire-blooded dragon companion.", sort_order: 1, i18n: { es: { name: "Draco", description: "Compañero dragón de sangre ardiente." } } },
@@ -34,8 +35,24 @@ const companions = [
   { id: "boar", name: "Boar", description: "Tenacious charging tusker.", sort_order: 23, i18n: { es: { name: "Jabalí", description: "Embestidor tenaz de colmillos." } } },
 ] as const;
 
+/** Canonical rows enriched with their element typing (companion-elements.ts is
+ *  the single source of truth for which pets are single- vs dual-element). */
+const companionsWithElements = companions.map((c) => {
+  const el = COMPANION_ELEMENTS[c.id];
+  return {
+    ...c,
+    element_primary: el?.primary ?? null,
+    element_secondary: el?.secondary ?? null,
+  };
+});
+
 export async function seedCompanions(client: SupabaseClient): Promise<SeedReport[]> {
   return [
-    await upsertWithI18n(client, "companions", "companion", companions as readonly { id: string; i18n?: RecordTranslations }[]),
+    await upsertWithI18n(
+      client,
+      "companions",
+      "companion",
+      companionsWithElements as readonly { id: string; i18n?: RecordTranslations }[],
+    ),
   ];
 }

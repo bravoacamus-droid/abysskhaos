@@ -10,6 +10,7 @@
 import { ELEMENT_WEIGHTS } from "@/data/destiny/elements";
 import { DESTINY_CLASS_BY_ID } from "@/data/destiny/classes";
 import { ALL_PASSIVE_IDS } from "@/data/destiny/passives";
+import { isDualCompanion } from "@/data/destiny/companion-elements";
 import type {
   AttrKey,
   ClassId,
@@ -79,7 +80,9 @@ export function rollElement(rng: Rng): ElementId {
 
 /**
  * Companion: occupation proposes #1, hobby proposes #1; forced distinct (fall
- * back to the hobby's then the occupation's #2), then 50/50.
+ * back to the hobby's then the occupation's #2), then weighted pick between the
+ * two. DUAL-element pets are rarer: a dual candidate weighs half a single one
+ * (so single-vs-dual ≈ 2/3 vs 1/3). See data/destiny/companion-elements.ts.
  */
 export function rollCompanion(occupation: OccupationOption, hobby: OccupationOption, rng: Rng): CompanionId {
   let a = occupation.companions[0];
@@ -92,7 +95,9 @@ export function rollCompanion(occupation: OccupationOption, hobby: OccupationOpt
     a = occupation.companions[0];
     b = occupation.companions[1];
   }
-  return rng() < 0.5 ? a : b;
+  const wa = isDualCompanion(a) ? 0.5 : 1;
+  const wb = isDualCompanion(b) ? 0.5 : 1;
+  return rng() < wa / (wa + wb) ? a : b;
 }
 
 export function rollWeapon(classId: ClassId, rng: Rng): WeaponLoadoutId {
